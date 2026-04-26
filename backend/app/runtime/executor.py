@@ -5,11 +5,13 @@ import time
 from collections import defaultdict
 from dataclasses import dataclass
 from decimal import Decimal
-from typing import Any, Callable
+from typing import Any
 
-from backend.app.agents.base import BaseAgent
 from backend.app.models.domain import PlanNode
+from backend.app.runtime.events import InMemoryEventBus
 from backend.app.runtime.guardrails import ExecutionCounters, GuardrailEnforcer
+from backend.app.runtime.registry import AgentRegistry
+from backend.app.runtime.worker import Worker
 
 
 @dataclass(slots=True)
@@ -21,13 +23,14 @@ class NodeExecutionResult:
 
 
 class ParallelExecutor:
-    def __init__(self, guardrails: GuardrailEnforcer):
+    def __init__(self, guardrails: GuardrailEnforcer, event_bus: InMemoryEventBus | None = None):
         self.guardrails = guardrails
+        self.event_bus = event_bus or InMemoryEventBus()
 
     async def execute(
         self,
         nodes: list[PlanNode],
-        agent_factory: Callable[[str], BaseAgent],
+        registry: AgentRegistry,
         node_inputs: dict[str, dict[str, Any]],
     ) -> dict[str, NodeExecutionResult]:
         start = time.monotonic()
@@ -44,6 +47,7 @@ class ParallelExecutor:
         done: dict[str, NodeExecutionResult] = {}
         counters = ExecutionCounters(total_agents_spawned=0, running_parallel=0)
         semaphore = asyncio.Semaphore(self.guardrails.config.max_parallel)
+        worker = Worker(registry=registry, event_bus=self.event_bus)
 
         async def run_node(node_key: str) -> NodeExecutionResult:
             node = by_key[node_key]
@@ -51,7 +55,6 @@ class ParallelExecutor:
                 counters.running_parallel += 1
                 self.guardrails.check_parallel(counters)
 
-                agent = agent_factory(node.node_type)
                 counters.total_agents_spawned += 1
                 self.guardrails.check_spawn(counters)
 
@@ -61,11 +64,40 @@ class ParallelExecutor:
                         dep: done[dep].output for dep in node.depends_on if done[dep].success
                     }
 
+                self.event_bus.emit(
+                    org_id=node.org_id,
+                    thread_id=node.thread_id,
+                    event_type="NODE_RUNNING",
+                    payload={"node_key": node.node_key, "node_type": node.node_type},
+                )
+
                 try:
-                    output = await agent.run(payload)
-                    result = NodeExecutionResult(node_key=node_key, success=True, output=output)
-                except Exception as exc:  # runtime faults should be captured per node
-                    result = NodeExecutionResult(node_key=node_key, success=False, error=str(exc))
+                    worker_result = await worker.run_node(
+                        org_id=node.org_id,
+                        thread_id=node.thread_id,
+                        node=node,
+                        payload=payload,
+                    )
+                    if worker_result.success:
+                        self.event_bus.emit(
+                            org_id=node.org_id,
+                            thread_id=node.thread_id,
+                            event_type="NODE_SUCCEEDED",
+                            payload={"node_key": node.node_key},
+                        )
+                        result = NodeExecutionResult(
+                            node_key=node_key, success=True, output=worker_result.output
+                        )
+                    else:
+                        self.event_bus.emit(
+                            org_id=node.org_id,
+                            thread_id=node.thread_id,
+                            event_type="NODE_FAILED",
+                            payload={"node_key": node.node_key, "error": worker_result.error},
+                        )
+                        result = NodeExecutionResult(
+                            node_key=node_key, success=False, error=worker_result.error
+                        )
                 finally:
                     counters.running_parallel -= 1
 
@@ -81,7 +113,6 @@ class ParallelExecutor:
                 for child in dependents[result.node_key]:
                     dep_count[child] -= 1
                     if dep_count[child] == 0:
-                        # block failed upstream chains
                         failed_dep = any(not done[d].success for d in by_key[child].depends_on)
                         if not failed_dep:
                             ready.append(child)
