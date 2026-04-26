@@ -74,8 +74,15 @@ async def run_observability_command(command: str) -> dict:
 
 
 def render_ui_snapshot(report: dict, output_path: str) -> None:
-    path = Path(output_path)
-    path.parent.mkdir(parents=True, exist_ok=True)
+    # Resolve the base directory and the target path to their absolute forms
+    base_dir = Path("artifacts").resolve()
+    target_path = Path(output_path).resolve()
+
+    # Security check: ensure the target path is within the base directory
+    if not target_path.is_relative_to(base_dir):
+        raise ValueError(f"Security Error: Access to {output_path} is denied. Path must be within {base_dir}")
+
+    target_path.parent.mkdir(parents=True, exist_ok=True)
     ui_model = {
         "header": {
             "title": "Observability Stack Simulation",
@@ -93,7 +100,7 @@ def render_ui_snapshot(report: dict, output_path: str) -> None:
             for key, value in report["results"].items()
         ],
     }
-    path.write_text(json.dumps(ui_model, indent=2), encoding="utf-8")
+    target_path.write_text(json.dumps(ui_model, indent=2), encoding="utf-8")
 
 
 def run_demo(command: str = "run observability readiness validation") -> dict:

@@ -3,7 +3,7 @@
     "title": "Observability Stack Simulation",
     "registry_agents": 15,
     "active_agents": 5,
-    "command": "test command: evaluate observability stack and handoffs"
+    "command": "test observability simulation"
   },
   "states": [
     {
