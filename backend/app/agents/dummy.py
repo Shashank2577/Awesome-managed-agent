@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-from statistics import mean
 from typing import Any
 
 from backend.app.agents.base import BaseAgent
@@ -72,19 +71,21 @@ class SummaryAgent(LifecycleAgent):
         if not isinstance(results, list):
             raise TypeError("results must be a list")
 
-        word_counts: list[int] = []
-        char_counts: list[int] = []
+        total_words = 0
+        total_chars = 0
+        valid_items_count = 0
         for item in results:
             if isinstance(item, dict):
-                word_counts.append(int(item.get("word_count", 0)))
-                char_counts.append(int(item.get("char_count", 0)))
+                total_words += int(item.get("word_count", 0))
+                total_chars += int(item.get("char_count", 0))
+                valid_items_count += 1
 
         summary = {
             "agent_type": self.agent_type,
             "result_count": len(results),
-            "total_words": sum(word_counts),
-            "avg_words": float(mean(word_counts)) if word_counts else 0.0,
-            "total_chars": sum(char_counts),
+            "total_words": total_words,
+            "avg_words": (total_words / valid_items_count) if valid_items_count > 0 else 0.0,
+            "total_chars": total_chars,
         }
 
         self.transition(AgentStatus.COMPLETED)
