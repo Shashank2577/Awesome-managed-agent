@@ -175,13 +175,3 @@ class ToolInvocation:
     output: Optional[dict[str, Any]] = None
 
 
-@dataclass(slots=True)
-class Event:
-    event_id: UUID
-    org_id: UUID
-    thread_id: UUID
-    type: str
-    payload: dict[str, Any]
-    timestamp: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
-    causation_id: Optional[UUID] = None
-    correlation_id: Optional[UUID] = None
