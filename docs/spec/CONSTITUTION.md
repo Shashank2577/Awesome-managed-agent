@@ -2,134 +2,53 @@
 
 ## 1. Purpose
 
-This document defines the immutable principles governing the design and implementation of the Agent Operating System (Agent OS).
-
-All contributions MUST comply with this constitution.
+Define immutable principles governing Agent OS.
 
 ---
 
-## 2. System Definition
+## 2. Core Laws
 
-Agent OS is a stateful, event-driven, multi-agent orchestration platform that enables dynamic formation, execution, and observability of agent teams.
+### 1. Event-Driven Execution (MANDATORY)
+All interactions MUST be events.
 
----
+### 2. Explicit Execution Graph (MANDATORY)
+All workflows MUST be graph-based and inspectable.
 
-## 3. Core Principles
+### 3. Ephemeral Agents (MANDATORY)
+Agents MUST be stateless and isolated.
 
-### 3.1 Event-Driven Execution (MANDATORY)
-All system actions MUST be represented as events.
+### 4. Deterministic Guardrails (MANDATORY)
+All LLM behavior MUST be bounded.
 
-Requirements:
-- All state changes emit events
-- Events must be persisted and replayable
-- No hidden synchronous coupling
+### 5. Observable Execution (MANDATORY)
+All actions MUST be traceable.
 
----
+### 6. Human-in-the-Loop (MANDATORY)
+Execution MUST support pause, resume, and override.
 
-### 3.2 Explicit Execution Graph (MANDATORY)
-All workflows MUST be represented as explicit graphs.
+### 7. Separation of Concerns (MANDATORY)
+Control, Execution, Event, and State layers MUST be independent.
 
-Requirements:
-- Nodes represent agents/tools/decisions
-- Edges define dependencies
-- Graph must be inspectable at runtime
+### 8. Extensibility First (MANDATORY)
+Agents, tools, and models MUST be pluggable.
 
----
+### 9. Fault Tolerance (MANDATORY)
+System MUST handle retries and partial failures.
 
-### 3.3 Ephemeral Agents (MANDATORY)
-Agents MUST be stateless execution units.
-
-Requirements:
-- No internal persistent state
-- Memory externalized
-- Isolated execution
+### 10. Cost Awareness (MANDATORY)
+Execution MUST respect budget constraints.
 
 ---
 
-### 3.4 Deterministic Guardrails (MANDATORY)
-LLM behavior MUST be constrained.
+## 3. Enforcement
 
-Requirements:
-- max_agents limit
-- max_execution_time
-- max_pivots
-- output validation
+Any violation MUST be rejected during design and review.
 
 ---
 
-### 3.5 Observable Execution (MANDATORY)
-All execution MUST be transparent.
+## 4. Evolution
 
-Requirements:
-- Agent lifecycle visible
-- Decisions logged
-- Execution trace available
-
----
-
-### 3.6 Human-in-the-Loop (MANDATORY)
-System MUST support intervention.
-
-Requirements:
-- Pause/resume
-- Approval steps
-- Manual overrides
-
----
-
-### 3.7 Separation of Concerns (MANDATORY)
-System MUST be layered.
-
-Layers:
-- Control Plane
-- Execution Plane
-- Event Layer
-- State Layer
-
----
-
-### 3.8 Extensibility First (MANDATORY)
-System MUST be pluggable.
-
-Requirements:
-- Agent plugins
-- Tool plugins
-- Model abstraction
-
----
-
-### 3.9 Fault Tolerance (MANDATORY)
-System MUST handle failures.
-
-Requirements:
-- Retry mechanisms
-- Partial failure handling
-- Checkpoint recovery
-
----
-
-### 3.10 Cost Awareness (MANDATORY)
-System MUST enforce budgets.
-
-Requirements:
-- Per-thread budget
-- Cost tracking
-- Termination on limit breach
-
----
-
-## 4. Enforcement
-
-Any violation of this constitution MUST be rejected during design or code review.
-
----
-
-## 5. Evolution
-
-Changes MUST:
-- Be explicit
-- Be versioned if breaking
-- Include justification
+Changes MUST be versioned and justified.
 
 ---
 
