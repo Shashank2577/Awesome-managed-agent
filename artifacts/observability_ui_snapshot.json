@@ -1,0 +1,40 @@
+{
+  "header": {
+    "title": "Observability Stack Simulation",
+    "registry_agents": 15,
+    "active_agents": 5,
+    "command": "test command: evaluate observability stack and handoffs"
+  },
+  "states": [
+    {
+      "agent_node": "metrics",
+      "agent_type": "metrics_ingestion",
+      "status": "COMPLETED",
+      "handoff_count": 0
+    },
+    {
+      "agent_node": "traces",
+      "agent_type": "trace_collection",
+      "status": "COMPLETED",
+      "handoff_count": 0
+    },
+    {
+      "agent_node": "logs",
+      "agent_type": "log_pipeline",
+      "status": "COMPLETED",
+      "handoff_count": 0
+    },
+    {
+      "agent_node": "alerts",
+      "agent_type": "alert_routing",
+      "status": "COMPLETED",
+      "handoff_count": 3
+    },
+    {
+      "agent_node": "slo",
+      "agent_type": "dashboard_slo",
+      "status": "COMPLETED",
+      "handoff_count": 1
+    }
+  ]
+}
