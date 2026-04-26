@@ -1,269 +1,150 @@
 # SPEC.md
 
-## 1. Overview
+## 1. System Model
 
-Agent OS is a stateful, event-driven system that orchestrates dynamic multi-agent teams to execute complex workflows.
-
----
-
-## 2. Actors
-
-### User
-Initiates workflows via prompt or event.
-
-### Commander
-Responsible for planning, orchestration, and decision-making.
-
-### Agent
-Executes specialized tasks.
-
-### Worker
-Executes agent instances asynchronously.
+Agent OS is composed of:
+- Control Plane (Commander)
+- Execution Plane (Workers)
+- Agent Runtime
+- Tool System
+- Event Layer
+- UI Layer
 
 ---
 
-## 3. Core Entities
+## 2. Agent Lifecycle
 
-### Thread
-```
-{
-  "thread_id": "string",
-  "status": "CREATED | RUNNING | PAUSED | COMPLETED | FAILED",
-  "budget": number,
-  "created_at": timestamp,
-  "updated_at": timestamp
-}
-```
+States:
+CREATED → REGISTERED → READY → QUEUED → RUNNING → WAITING → COMPLETED | FAILED | TERMINATED
+
+Rules:
+- Agents MUST NOT skip states
+- WAITING indicates dependency
+- TERMINATED is final state
 
 ---
 
-### AgentInstance
-```
-{
-  "instance_id": "string",
-  "agent_type": "string",
-  "thread_id": "string",
-  "status": "CREATED | QUEUED | RUNNING | COMPLETED | FAILED | TERMINATED",
-  "input": {},
-  "output": {},
-  "cost": number
-}
-```
+## 3. Agent Registration
 
----
+POST /agents/register
 
-### Plan
-```
-{
-  "plan_id": "string",
-  "thread_id": "string",
-  "graph": {
-    "nodes": [],
-    "edges": []
-  },
-  "version": number
-}
-```
-
----
-
-### Event
-```
-{
-  "event_id": "string",
-  "thread_id": "string",
-  "type": "string",
-  "payload": {},
-  "timestamp": "ISO8601"
-}
-```
-
----
-
-## 4. API Contracts
-
-### 4.1 Create Thread
-POST /threads
-
-Request:
-```
-{
-  "input": "string",
-  "context": {},
-  "budget": number
-}
-```
-
-Response:
-```
-{
-  "thread_id": "string"
-}
-```
-
----
-
-### 4.2 Get Thread
-GET /threads/{thread_id}
-
-Response:
-```
-{
-  "thread": {},
-  "plan": {},
-  "agents": []
-}
-```
-
----
-
-### 4.3 Stream Events
-GET /threads/{thread_id}/events (SSE)
-
-Event:
-```
-data: {
-  "type": "AGENT_STARTED",
-  "payload": {}
-}
-```
-
----
-
-## 5. Event Types
-
-- THREAD_CREATED
-- PLAN_CREATED
-- AGENT_SPAWNED
-- AGENT_STARTED
-- AGENT_COMPLETED
-- AGENT_FAILED
-- COMMANDER_PIVOT
-- THREAD_COMPLETED
-
----
-
-## 6. Execution Semantics
-
-### 6.1 State Transitions
-
-Thread:
-CREATED → RUNNING → PAUSED → RUNNING → COMPLETED | FAILED
-
-Agent:
-CREATED → QUEUED → RUNNING → COMPLETED
-                      → FAILED → RETRY → RUNNING
-
-Invalid transitions MUST be rejected.
-
----
-
-### 6.2 Retry Policy
-
-- max_retries = 3
-- exponential backoff
-
----
-
-### 6.3 Idempotency
-
-Agent executions MUST be idempotent.
-
----
-
-### 6.4 Budget Enforcement
-
-- Each thread has a budget
-- Each agent execution consumes cost
-- Execution terminates when budget exceeded
-
----
-
-## 7. Agent Capability System
-
-### Capability
-```
-{
-  "name": "string",
-  "input_schema": {},
-  "cost_profile": "low | medium | high"
-}
-```
-
----
-
-### Agent Registry
 ```
 {
   "agent_type": "string",
   "capabilities": ["string"],
-  "tools": [],
-  "cost_profile": "string"
+  "tools": ["tool_id"],
+  "execution_mode": "sync | async",
+  "visibility": "public | private | system"
 }
 ```
 
 ---
 
-### Selection Algorithm
+## 4. Tool System
 
-Steps:
-1. Decompose task into capabilities
-2. Match capabilities to agents
-3. Rank by cost and availability
-4. Spawn N instances if required
+Tool:
+```
+{
+  "tool_id": "string",
+  "input_schema": {},
+  "endpoint": "url",
+  "timeout": number
+}
+```
 
----
-
-## 8. Functional Requirements
-
-FR-1 Trigger Handling
-FR-2 Plan Generation
-FR-3 Agent Selection
-FR-4 Parallel Execution
-FR-5 Result Aggregation
-FR-6 Pivoting
-FR-7 Observability
-FR-8 Checkpointing
-FR-9 Guardrails
+Flow:
+Agent → Event → Worker → Tool → Result Event
 
 ---
 
-## 9. Non-Functional Requirements
+## 5. Commander Model
 
-NFR-1 Scalability
-NFR-2 Reliability
-NFR-3 Performance
-NFR-4 Extensibility
+Loop:
+Input → Plan → Execute → Evaluate → Pivot or Finish
 
 ---
 
-## 10. Scenarios
+## 6. Communication Model
 
-### Scenario 1: Basic Execution
-
-1. User creates thread
-2. Commander generates plan
-3. Agents spawned
-4. Agents execute in parallel
-5. Results aggregated
-6. Thread completes
+- Agents communicate only via events
+- No direct calls allowed
 
 ---
 
-### Scenario 2: Pivot
+## 7. UI Interaction
 
-1. Agents return conflicting results
-2. Commander evaluates
-3. Commander updates plan
-4. New agents spawned
+UI subscribes to event stream.
+
+Actions:
+- approve
+- reject
+- pause
+- resume
+- provide input
 
 ---
 
-### Scenario 3: Failure Handling
+## 8. Visibility
 
-1. Agent fails
-2. Retry triggered
-3. If retries exceed → commander decides next step
+Modes:
+- public
+- private
+- system
+
+---
+
+## 9. Waiting vs Termination
+
+WAITING:
+- tool pending
+- user input
+
+TERMINATED:
+- completed
+- failed
+- cancelled
+
+---
+
+## 10. Event Contract
+
+```
+{
+  "event_id": "string",
+  "type": "string",
+  "source": "string",
+  "target": "string",
+  "payload": {},
+  "timestamp": "ISO"
+}
+```
+
+---
+
+## 11. Execution Rules
+
+- Idempotent agents required
+- Retry with backoff
+- At-least-once execution
+
+---
+
+## 12. Guardrails
+
+- max_agents
+- max_parallel
+- max_time
+- max_cost
+- max_pivots
+
+---
+
+## 13. Extensibility
+
+- Agent plugins
+- Tool plugins
+- UI plugins
+- Model providers
 
 ---
 
