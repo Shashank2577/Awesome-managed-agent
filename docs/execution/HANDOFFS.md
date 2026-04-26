@@ -3,25 +3,25 @@
 ## Latest Handoff
 
 ### Last Completed Task
-T2: Implement Commander.plan()
+T3: Implement Agent Base Interface
 
 ---
 
 ### Current State
-- Backend skeleton created
-- Commander basic planning working
-- Agent system partially implemented
+- BaseAgent contract implemented
+- Agent lifecycle foundation established
+- Ready for concrete agent implementations
 
 ---
 
 ### In Progress
-- T3: Implement Agent Base Interface
+- T4: Implement Dummy Agents
 
 ---
 
 ### Next Tasks
-- T4: Implement Dummy Agents
 - T5: Implement Parallel Execution Flow
+- T6: Add Guardrails Stub
 
 ---
 
@@ -31,8 +31,8 @@ T2: Implement Commander.plan()
 ---
 
 ### Notes
-- Ensure agents follow async execution model
-- Keep lifecycle aligned with SPEC.md
+- All agents must inherit BaseAgent
+- Maintain async execution compatibility
 
 ---
 
