@@ -1,0 +1,11 @@
+body { background: #f8fafc; }
+header { align-items: center; }
+.actions { display:flex; gap: .5rem; justify-content:flex-end; }
+#threadList .thread { border:1px solid #dbe4ef; border-radius:8px; padding:.75rem; margin-bottom:.5rem; background:#fff; }
+#timeline { max-height: 380px; overflow:auto; border:1px solid #dbe4ef; border-radius:8px; padding:.5rem; background:#fff; }
+.event { padding:.4rem; border-bottom:1px solid #eef2f7; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+.event.error { background:#fff1f2; }
+#graph { width:100%; background:white; border:1px solid #dbe4ef; border-radius:8px; }
+.node { cursor:pointer; }
+.node text { font-size: 12px; }
+pre { min-height: 260px; }

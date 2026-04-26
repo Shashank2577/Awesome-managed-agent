@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Agent Runtime Console</title>
+    <link rel="stylesheet" href="https://unpkg.com/@picocss/pico@2/css/pico.min.css" />
+    <link rel="stylesheet" href="/frontend/styles.css" />
+  </head>
+  <body>
+    <main class="container-fluid">
+      <header class="grid">
+        <div>
+          <h2>Agent Runtime Console</h2>
+          <p id="subtitle">Thread-aware control plane + execution timeline.</p>
+        </div>
+        <div class="actions">
+          <button id="pauseBtn">Pause</button>
+          <button id="resumeBtn" class="secondary">Resume</button>
+          <button id="cancelBtn" class="contrast">Cancel</button>
+        </div>
+      </header>
+
+      <section class="grid">
+        <article>
+          <h4>Thread List</h4>
+          <div id="threadList"></div>
+        </article>
+        <article>
+          <h4>Budget Panel</h4>
+          <div id="budgetPanel"></div>
+        </article>
+      </section>
+
+      <section class="grid">
+        <article>
+          <h4>Execution Graph View</h4>
+          <svg id="graph" viewBox="0 0 900 260"></svg>
+        </article>
+        <article>
+          <h4>Agent Instance Inspector</h4>
+          <pre id="inspector">Select a node to inspect.</pre>
+        </article>
+      </section>
+
+      <section>
+        <h4>Live Event Timeline</h4>
+        <label>
+          Filter by type
+          <input id="eventFilter" type="text" placeholder="e.g. AGENT_STATE_TRANSITIONED" />
+        </label>
+        <div id="timeline"></div>
+      </section>
+
+      <section>
+        <h4>Human-in-the-Loop</h4>
+        <form id="humanInputForm">
+          <input name="input" placeholder="Provide operator input" required />
+          <button type="submit">Submit input</button>
+        </form>
+      </section>
+    </main>
+    <script src="/frontend/app.js" type="module"></script>
+  </body>
+</html>
