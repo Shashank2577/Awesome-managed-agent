@@ -101,8 +101,13 @@ async def run_observability_command(command: str, *, thread_id: UUID | None = No
 
 
 def render_ui_snapshot(report: dict, output_path: str) -> None:
-    path = Path(output_path)
-    path.parent.mkdir(parents=True, exist_ok=True)
+    base_dir = Path("artifacts").resolve()
+    target_path = Path(output_path).resolve()
+    if not target_path.is_relative_to(base_dir):
+        raise ValueError(
+            f"render_ui_snapshot refused: {output_path!r} escapes {base_dir}"
+        )
+    target_path.parent.mkdir(parents=True, exist_ok=True)
     ui_model = {
         "header": {
             "title": "Observability Stack Simulation",
@@ -121,7 +126,7 @@ def render_ui_snapshot(report: dict, output_path: str) -> None:
         ],
         "timeline": report.get("events", []),
     }
-    path.write_text(json.dumps(ui_model, indent=2), encoding="utf-8")
+    target_path.write_text(json.dumps(ui_model, indent=2), encoding="utf-8")
 
 
 def run_demo(command: str = "run observability readiness validation") -> dict:
