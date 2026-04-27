@@ -116,7 +116,7 @@ def main():
     sub = parser.add_subparsers(dest="command")
 
     serve_p = sub.add_parser("serve", help="Start the API + dashboard")
-    serve_p.add_argument("--host", default="127.0.0.1")
+    serve_p.add_argument("--host", default="0.0.0.0")
     serve_p.add_argument("--port", type=int, default=8080)
     serve_p.add_argument("--llm", default=None, help="LLM config (e.g. gemini:gemini-2.0-flash). Auto-detects from API keys if not set.")
     serve_p.set_defaults(func=cmd_serve)

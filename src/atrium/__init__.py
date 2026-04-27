@@ -22,11 +22,16 @@ class Atrium:
     def register(self, agent_cls):
         self.registry.register(agent_cls)
 
-    def serve(self, host="127.0.0.1", port=8080):
+    def serve(self, host=None, port=8080):
+        import os
         import uvicorn
         from atrium.api.app import create_app
+
+        if host is None:
+            host = os.getenv("ATRIUM_HOST", "0.0.0.0")
         app = create_app(registry=self.registry, llm_config=self.llm_config, guardrails=self.guardrails)
         print(f"Atrium serving at http://{host}:{port}")
+        print(f"LLM: {self.llm_config}")
         uvicorn.run(app, host=host, port=port)
 
 
