@@ -78,3 +78,24 @@ async def test_get_thread(app):
     assert data["thread_id"] == thread_id
     assert data["objective"] == "fetch me"
     assert "events" in data
+
+
+async def test_delete_thread(app):
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        # Create a thread first
+        resp = await client.post("/api/v1/threads", json={"objective": "to delete"})
+        tid = resp.json()["thread_id"]
+        # Delete it
+        resp = await client.delete(f"/api/v1/threads/{tid}")
+        assert resp.status_code == 204
+        # Verify it's gone
+        resp = await client.get(f"/api/v1/threads/{tid}")
+        assert resp.status_code == 404
+
+
+async def test_delete_nonexistent_thread(app):
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.delete("/api/v1/threads/nonexistent")
+        assert resp.status_code == 404

@@ -16,7 +16,7 @@ from atrium.api.schemas import (
     ThreadListResponse,
     ThreadResponse,
 )
-from atrium.core.models import Thread
+from atrium.core.models import Thread, ThreadStatus
 
 router = APIRouter()
 
@@ -42,10 +42,18 @@ async def _run_orchestrator(thread_id: str, objective: str) -> None:
     orchestrator = get_orchestrator()
     if orchestrator is None:
         return
+
+    thread = _threads.get(thread_id)
+    if thread:
+        thread.status = ThreadStatus.RUNNING
+
     try:
         await orchestrator.run(objective=objective, thread_id=thread_id)
+        if thread:
+            thread.status = ThreadStatus.COMPLETED
     except Exception:
-        pass  # errors are emitted as events; don't crash the background task
+        if thread:
+            thread.status = ThreadStatus.FAILED
 
 
 @router.post("/threads", response_model=ThreadResponse, status_code=201)
@@ -121,3 +129,14 @@ async def stream_thread(thread_id: str) -> StreamingResponse:
             "X-Accel-Buffering": "no",
         },
     )
+
+
+@router.delete("/threads/{thread_id}", status_code=204)
+async def delete_thread(thread_id: str):
+    """Cancel and archive a thread."""
+    if thread_id not in _threads:
+        raise HTTPException(status_code=404, detail="Thread not found")
+    thread = _threads[thread_id]
+    thread.status = ThreadStatus.CANCELLED
+    del _threads[thread_id]
+    return None

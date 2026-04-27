@@ -91,3 +91,22 @@ async def test_orchestrator_emits_plan_events(registry, recorder):
     assert "PLAN_CREATED" in types
     assert "PLAN_EXECUTION_STARTED" in types
     assert "PLAN_COMPLETED" in types
+
+
+async def test_orchestrator_handles_plan_failure(registry, recorder):
+    orchestrator = ThreadOrchestrator(
+        registry=registry,
+        recorder=recorder,
+        guardrails=GuardrailsConfig(),
+        llm_config="openai:gpt-4o-mini",
+    )
+
+    with patch.object(orchestrator._commander, "plan", new_callable=AsyncMock, side_effect=RuntimeError("LLM failed")):
+        result = await orchestrator.run("test")
+
+    assert result["status"] == "FAILED"
+    assert "LLM failed" in result["error"]
+    events = recorder.replay(result["thread_id"])
+    types = [e.type for e in events]
+    assert "THREAD_CREATED" in types
+    assert "THREAD_FAILED" in types
