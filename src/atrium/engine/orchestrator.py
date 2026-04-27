@@ -335,6 +335,9 @@ class ThreadOrchestrator:
             return {"thread_id": tid, "status": "COMPLETED", "outputs": outputs}
 
         except Exception as exc:
+            import traceback
+            tb = traceback.format_exc()
+            print(f"[ATRIUM] Thread {tid} failed:\n{tb}", flush=True)
             await self._recorder.emit(tid, "THREAD_FAILED", {"error": str(exc), "thread_id": tid})
             await self._recorder.complete(tid)
             return {"thread_id": tid, "status": "FAILED", "error": str(exc)}
