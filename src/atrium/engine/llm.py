@@ -1,0 +1,58 @@
+"""LLM client supporting multiple providers via langchain-core."""
+
+from __future__ import annotations
+
+import json
+import re
+from typing import Any
+
+from langchain_core.messages import HumanMessage, SystemMessage
+
+
+def parse_llm_config(config_str: str) -> tuple[str, str | None]:
+    """Parse 'provider:model' string. Model is optional."""
+    if ":" in config_str:
+        provider, model = config_str.split(":", 1)
+        return provider, model
+    return config_str, None
+
+
+def _strip_markdown_fence(text: str) -> str:
+    """Remove ```json ... ``` wrappers if present."""
+    text = text.strip()
+    if text.startswith("```"):
+        text = re.sub(r"^```\w*\n?", "", text)
+        text = re.sub(r"\n?```$", "", text)
+    return text.strip()
+
+
+class LLMClient:
+    """Unified LLM client for Commander planning calls."""
+
+    def __init__(self, config: str = "openai:gpt-4o-mini"):
+        self._provider, self._model = parse_llm_config(config)
+
+    def _get_chat_model(self):
+        """Lazy-load the appropriate chat model."""
+        if self._provider == "openai":
+            from langchain_openai import ChatOpenAI
+            return ChatOpenAI(model=self._model or "gpt-4o-mini")
+        elif self._provider == "anthropic":
+            from langchain_anthropic import ChatAnthropic
+            return ChatAnthropic(model=self._model or "claude-sonnet-4-6")
+        elif self._provider in ("google", "gemini"):
+            from langchain_google_genai import ChatGoogleGenerativeAI
+            return ChatGoogleGenerativeAI(model=self._model or "gemini-1.5-flash")
+        else:
+            raise ValueError(f"Unknown LLM provider: {self._provider}")
+
+    async def generate_json(self, system_prompt: str, user_prompt: str) -> dict[str, Any]:
+        """Send a system+user prompt and parse the response as JSON."""
+        model = self._get_chat_model()
+        messages = [
+            SystemMessage(content=system_prompt),
+            HumanMessage(content=user_prompt),
+        ]
+        response = await model.ainvoke(messages)
+        text = _strip_markdown_fence(response.content)
+        return json.loads(text)
