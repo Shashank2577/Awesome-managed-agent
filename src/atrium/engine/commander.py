@@ -117,7 +117,22 @@ class Commander:
         system_prompt = PLAN_SYSTEM_PROMPT.format(manifest=manifest_json)
         user_prompt = f"Objective: {objective}"
 
-        raw: dict[str, Any] = await self._llm.generate_json(system_prompt, user_prompt)
+        try:
+            raw: dict[str, Any] = await self._llm.generate_json(system_prompt, user_prompt)
+        except Exception:
+            # Fallback: run all agents sequentially
+            return Plan(
+                thread_id="",
+                rationale="LLM planning failed, running all agents.",
+                steps=[PlanStep(agent=e["name"], inputs={}, depends_on=[]) for e in manifest],
+            )
+
+        if not isinstance(raw, dict):
+            return Plan(
+                thread_id="",
+                rationale="LLM returned non-dict, running all agents.",
+                steps=[PlanStep(agent=e["name"], inputs={}, depends_on=[]) for e in manifest],
+            )
 
         known_agents: set[str] = {entry["name"] for entry in manifest}
 
@@ -156,7 +171,10 @@ class Commander:
         For pivot decisions, new_steps agent names are validated against the
         registry.
         """
-        outputs_json = json.dumps(outputs, indent=2)
+        try:
+            outputs_json = json.dumps(outputs, indent=2, default=str)
+        except Exception:
+            outputs_json = str(outputs)[:5000]
 
         system_prompt = EVAL_SYSTEM_PROMPT.format(
             objective=objective,
@@ -164,7 +182,21 @@ class Commander:
         )
         user_prompt = f"Evaluate the outputs and decide: finalize or pivot."
 
-        raw: dict[str, Any] = await self._llm.generate_json(system_prompt, user_prompt)
+        try:
+            raw: dict[str, Any] = await self._llm.generate_json(system_prompt, user_prompt)
+        except Exception:
+            return EvalDecision(
+                action="finalize",
+                summary="Evaluation failed, finalizing with available results.",
+                findings=[{"severity": "low", "text": "LLM evaluation call failed"}],
+                recommendations=["Review raw agent outputs"],
+            )
+
+        if not isinstance(raw, dict):
+            return EvalDecision(
+                action="finalize",
+                summary=str(raw)[:200] if raw else "Analysis complete.",
+            )
 
         decision = raw.get("decision", "finalize")
         summary = raw.get("summary", "")
