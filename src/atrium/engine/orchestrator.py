@@ -26,9 +26,11 @@ class ThreadOrchestrator:
         self._guardrails = GuardrailEnforcer(guardrails)
         self._commander = Commander(llm_config=llm_config, registry=registry)
 
-    async def run(self, objective: str) -> dict[str, Any]:
+    async def run(self, objective: str, thread_id: str | None = None) -> dict[str, Any]:
         """Execute a full thread lifecycle and return a summary dict."""
         thread = Thread(objective=objective)
+        if thread_id is not None:
+            thread.thread_id = thread_id
         tid = thread.thread_id
 
         # Phase 1: Thread creation
