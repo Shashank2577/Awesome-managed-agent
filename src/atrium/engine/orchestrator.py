@@ -86,10 +86,13 @@ def get_controller(thread_id: str) -> ThreadController | None:
 # Helpers
 # ---------------------------------------------------------------------------
 
-def _build_severity_chart(findings: list[dict]) -> list[dict]:
+def _build_severity_chart(findings: list) -> list[dict]:
     """Build a simple bar chart from finding severities."""
     counts = {"high": 0, "med": 0, "low": 0}
     for f in findings:
+        if not isinstance(f, dict):
+            counts["low"] += 1
+            continue
         sev = f.get("severity", "low")
         if sev in counts:
             counts[sev] += 1

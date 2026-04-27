@@ -222,11 +222,28 @@ class Commander:
                     )
                 )
 
+        # Sanitize findings: ensure each is a dict
+        raw_findings = raw.get("findings", [])
+        if not isinstance(raw_findings, list):
+            raw_findings = []
+        findings = []
+        for f in raw_findings:
+            if isinstance(f, dict):
+                findings.append(f)
+            elif isinstance(f, str):
+                findings.append({"severity": "low", "text": f})
+
+        # Sanitize recommendations: ensure each is a string
+        raw_recs = raw.get("recommendations", [])
+        if not isinstance(raw_recs, list):
+            raw_recs = [str(raw_recs)] if raw_recs else []
+        recommendations = [str(r) for r in raw_recs]
+
         return EvalDecision(
             action=decision,
             summary=summary,
             rationale=rationale,
             new_steps=new_steps,
-            findings=raw.get("findings", []),
-            recommendations=raw.get("recommendations", []),
+            findings=findings,
+            recommendations=recommendations,
         )
