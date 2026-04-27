@@ -9,7 +9,7 @@ from atrium.examples.observe.agents.deep_diver import DeepDiverAgent
 
 app = Atrium(
     agents=[PathfinderAgent, MapperAgent, AnalystAgent, DeepDiverAgent],
-    llm="openai:gpt-4o-mini",
+    # llm auto-detected from GEMINI_API_KEY, OPENAI_API_KEY, or ANTHROPIC_API_KEY
 )
 
 if __name__ == "__main__":

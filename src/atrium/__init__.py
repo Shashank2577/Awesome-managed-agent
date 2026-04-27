@@ -10,9 +10,11 @@ __version__ = "0.1.0"
 class Atrium:
     """Main entry point for building an Atrium application."""
 
-    def __init__(self, agents=None, llm="openai:gpt-4o-mini", guardrails=None):
+    def __init__(self, agents=None, llm=None, guardrails=None):
+        from atrium.engine.llm import detect_llm
+
         self.registry = AgentRegistry()
-        self.llm_config = llm
+        self.llm_config = llm or detect_llm()
         self.guardrails = guardrails or GuardrailsConfig()
         for agent_cls in (agents or []):
             self.registry.register(agent_cls)

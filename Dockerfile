@@ -6,7 +6,7 @@ COPY pyproject.toml README.md ./
 COPY src/ src/
 COPY docs/ docs/
 
-RUN pip install --no-cache-dir ".[openai]"
+RUN pip install --no-cache-dir ".[all]"
 
 EXPOSE 8080
 

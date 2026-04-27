@@ -5,8 +5,13 @@ Observable, cost-bounded, human-in-the-loop agent orchestration on top of LangGr
 ## Quick Start
 
 ```bash
-pip install -e ".[openai]"
-export OPENAI_API_KEY="your-key"
+pip install -e ".[all]"
+
+# Set ANY one of these — Atrium auto-detects which provider to use:
+export GEMINI_API_KEY="your-key"     # Google Gemini
+# OR: export OPENAI_API_KEY="your-key"   # OpenAI
+# OR: export ANTHROPIC_API_KEY="your-key" # Anthropic
+
 python -m atrium.examples.hello_world.app
 ```
 
@@ -40,7 +45,7 @@ atrium new agent price_checker
 
 ```bash
 docker build -t atrium .
-docker run -p 8080:8080 -e OPENAI_API_KEY=your-key atrium
+docker run -p 8080:8080 -e GEMINI_API_KEY=your-key atrium
 ```
 
 ## Run Tests

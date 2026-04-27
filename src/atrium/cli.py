@@ -9,8 +9,12 @@ def cmd_serve(args):
     import uvicorn
     from atrium.api.app import create_app
     from atrium.core.registry import AgentRegistry
-    app = create_app(registry=AgentRegistry(), llm_config=args.llm)
+    from atrium.engine.llm import detect_llm
+
+    llm_config = args.llm or detect_llm()
+    app = create_app(registry=AgentRegistry(), llm_config=llm_config)
     print(f"Atrium serving at http://{args.host}:{args.port}")
+    print(f"LLM: {llm_config}")
     uvicorn.run(app, host=args.host, port=args.port)
 
 
@@ -114,7 +118,7 @@ def main():
     serve_p = sub.add_parser("serve", help="Start the API + dashboard")
     serve_p.add_argument("--host", default="127.0.0.1")
     serve_p.add_argument("--port", type=int, default=8080)
-    serve_p.add_argument("--llm", default="openai:gpt-4o-mini")
+    serve_p.add_argument("--llm", default=None, help="LLM config (e.g. gemini:gemini-2.0-flash). Auto-detects from API keys if not set.")
     serve_p.set_defaults(func=cmd_serve)
 
     ver_p = sub.add_parser("version", help="Print version")

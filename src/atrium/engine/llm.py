@@ -17,6 +17,24 @@ def parse_llm_config(config_str: str) -> tuple[str, str | None]:
     return config_str, None
 
 
+def detect_llm() -> str:
+    """Auto-detect the best LLM config from environment variables.
+
+    Checks for API keys in order: GEMINI_API_KEY, GOOGLE_API_KEY,
+    OPENAI_API_KEY, ANTHROPIC_API_KEY. Returns a 'provider:model' string
+    for the first key found. Falls back to 'openai:gpt-4o-mini'.
+    """
+    import os
+
+    if os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY"):
+        return "gemini:gemini-2.0-flash"
+    if os.getenv("OPENAI_API_KEY"):
+        return "openai:gpt-4o-mini"
+    if os.getenv("ANTHROPIC_API_KEY"):
+        return "anthropic:claude-sonnet-4-6"
+    return "openai:gpt-4o-mini"  # fallback
+
+
 def _strip_markdown_fence(text: str) -> str:
     """Remove ```json ... ``` wrappers if present."""
     text = text.strip()
@@ -41,8 +59,14 @@ class LLMClient:
             from langchain_anthropic import ChatAnthropic
             return ChatAnthropic(model=self._model or "claude-sonnet-4-6")
         elif self._provider in ("google", "gemini"):
+            import os
             from langchain_google_genai import ChatGoogleGenerativeAI
-            return ChatGoogleGenerativeAI(model=self._model or "gemini-1.5-flash")
+            # Support both GEMINI_API_KEY and GOOGLE_API_KEY
+            api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
+            kwargs = {"model": self._model or "gemini-2.0-flash"}
+            if api_key:
+                kwargs["google_api_key"] = api_key
+            return ChatGoogleGenerativeAI(**kwargs)
         else:
             raise ValueError(f"Unknown LLM provider: {self._provider}")
 

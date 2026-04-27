@@ -4,7 +4,7 @@ from atrium.examples.hello_world.agents import FactCheckerAgent, SummarizerAgent
 
 app = Atrium(
     agents=[WikiSearchAgent, SummarizerAgent, FactCheckerAgent],
-    llm="openai:gpt-4o-mini",
+    # llm auto-detected from GEMINI_API_KEY, OPENAI_API_KEY, or ANTHROPIC_API_KEY
 )
 
 if __name__ == "__main__":
