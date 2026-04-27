@@ -93,8 +93,15 @@ class ThreadView {
         this._onBudget(evt);
         break;
       case "THREAD_PLANNING_STARTED":
+      case "THREAD_PLANNING":
         this._setStatus("PLANNING");
         this._appendCommanderThinking("Planning the work…");
+        break;
+      case "THREAD_PAUSED":
+        this._setStatus("PAUSED");
+        break;
+      case "HUMAN_APPROVAL_REQUESTED":
+        this._onApprovalRequested(evt);
         break;
       case "COMMANDER_MESSAGE":
         this._onCommanderMessage(evt);
@@ -406,6 +413,24 @@ class ThreadView {
     // pivoted agents are reflected as the next AGENT_HIRED events
   }
 
+  _onApprovalRequested(evt) {
+    const p = evt.payload || {};
+    const html = `
+      <div class="pivot-ribbon">
+        <div class="avatar pivot" style="width:28px;height:28px;border-radius:8px;font-size:11px;">?</div>
+        <div>
+          <div class="label">Approval required</div>
+          <div>${escape(p.message || "Review the plan and approve or reject.")}</div>
+          <div style="margin-top:8px;display:flex;gap:8px;">
+            <button class="btn primary small" onclick="controlAction('approve')">Approve</button>
+            <button class="btn ghost small" onclick="controlAction('reject')">Reject</button>
+          </div>
+        </div>
+      </div>
+    `;
+    this.appendCard(html);
+  }
+
   _onEvidence(evt) {
     const p = evt.payload || {};
     const chart = renderChart(p.chart);
@@ -449,12 +474,15 @@ class ThreadView {
     };
     // Listen for typed events in addition to the default channel.
     [
-      "THREAD_CREATED","THREAD_PLANNING_STARTED","THREAD_RUNNING","THREAD_COMPLETED","THREAD_FAILED","THREAD_CANCELLED",
-      "BUDGET_RESERVED","BUDGET_CONSUMED",
-      "PLAN_GENERATION_STARTED","PLAN_CREATED","PLAN_APPROVED","PLAN_EXECUTION_STARTED","PLAN_COMPLETED",
-      "AGENT_HIRED","AGENT_REGISTERED","AGENT_READY","AGENT_QUEUED","AGENT_RUNNING","AGENT_COMPLETED","AGENT_FAILED",
+      "THREAD_CREATED","THREAD_PLANNING","THREAD_PLANNING_STARTED","THREAD_RUNNING",
+      "THREAD_COMPLETED","THREAD_FAILED","THREAD_CANCELLED","THREAD_PAUSED",
+      "BUDGET_RESERVED","BUDGET_CONSUMED","BUDGET_EXCEEDED",
+      "PLAN_CREATED","PLAN_APPROVED","PLAN_REJECTED","PLAN_EXECUTION_STARTED","PLAN_COMPLETED",
+      "AGENT_HIRED","AGENT_RUNNING","AGENT_COMPLETED","AGENT_FAILED",
       "AGENT_MESSAGE","AGENT_OUTPUT",
-      "COMMANDER_MESSAGE","PIVOT_REQUESTED","PIVOT_APPLIED","EVIDENCE_PUBLISHED",
+      "COMMANDER_MESSAGE","PIVOT_REQUESTED","PIVOT_APPLIED",
+      "HUMAN_APPROVAL_REQUESTED","HUMAN_INPUT_RECEIVED",
+      "EVIDENCE_PUBLISHED",
     ].forEach((t) => {
       es.addEventListener(t, (msg) => {
         try { this.handleEvent(JSON.parse(msg.data)); } catch (e) { /* ignore */ }
@@ -620,7 +648,7 @@ async function startThread(objective) {
     method: "POST",
     body: JSON.stringify({ objective }),
   });
-  const t = data.thread;
+  const t = data;
   const view = new ThreadView(t.thread_id, t.title, t.objective);
   appState.currentThread = view;
   appState.threads = [
