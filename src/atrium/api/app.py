@@ -58,7 +58,7 @@ def create_app(
     global _registry, _recorder, _orchestrator
 
     _registry = registry or AgentRegistry()
-    _recorder = EventRecorder()
+    _recorder = EventRecorder(db_path="atrium_events.db")
     _guardrails = guardrails or GuardrailsConfig()
 
     if llm_config is not None:

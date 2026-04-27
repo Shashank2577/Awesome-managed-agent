@@ -1,8 +1,9 @@
 """Converts a Commander Plan into a LangGraph StateGraph."""
 from __future__ import annotations
 
-from typing import Annotated, Any, TypedDict
+from typing import Annotated, Any, Optional, TypedDict
 
+from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.graph import END, START, StateGraph
 
 from atrium.core.models import Plan
@@ -70,6 +71,7 @@ def build_graph_from_plan(
     plan: Plan,
     registry: AgentRegistry,
     recorder: EventRecorder,
+    checkpointer_db: Optional[str] = None,
 ):
     """Compile a Plan into a LangGraph StateGraph."""
     graph: StateGraph = StateGraph(ThreadState)
@@ -95,4 +97,7 @@ def build_graph_from_plan(
     for leaf in leaves:
         graph.add_edge(leaf.agent, END)
 
+    if checkpointer_db:
+        checkpointer = SqliteSaver.from_conn_string(checkpointer_db)
+        return graph.compile(checkpointer=checkpointer)
     return graph.compile()
