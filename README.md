@@ -1,45 +1,69 @@
-# Atrium · the management plane for agents
+# Atrium
 
-Watch a team of agents think out loud. Atrium is a spec-aligned multi-agent
-runtime with a streaming chat UI: a commander reads your goal, hires
-specialists in parallel, narrates the plan, **pivots on evidence**, and ships
-a human-friendly report — every step streamed over SSE.
+Observable, cost-bounded, human-in-the-loop agent orchestration on top of LangGraph.
 
-## Quick start
+## Quick Start
 
 ```bash
-PYTHONPATH=. python scripts/run_runtime_ui.py
+pip install -e ".[openai]"
+export OPENAI_API_KEY="your-key"
+python -m atrium.examples.hello_world.app
 ```
 
-Then open `http://127.0.0.1:8080` for the landing page and
-`http://127.0.0.1:8080/console` for the live chat console.
+Open http://localhost:8080 — type a goal and watch agents work.
 
-## Run tests
+## Build Your Own
+
+```python
+from atrium import Agent, Atrium
+
+class MyAgent(Agent):
+    name = "my_agent"
+    description = "Does something useful"
+    capabilities = ["analyze"]
+
+    async def run(self, input_data: dict) -> dict:
+        await self.say("Working...")
+        return {"result": "done"}
+
+app = Atrium(agents=[MyAgent], llm="openai:gpt-4o-mini")
+app.serve()
+```
+
+## Scaffold a New Agent
 
 ```bash
-PYTHONPATH=. python -m unittest discover -s tests -v
+atrium new agent price_checker
 ```
 
-## What's inside
+## Docker
 
-- `backend/app/runtime/commander.py` — control plane: planning loop, agent
-  hiring, pivot engine, presenter agent
-- `backend/app/runtime/streaming.py` — async append-only event log with
-  per-thread fan-out for SSE
-- `backend/app/api/server.py` — HTTP API + real-time SSE endpoint
-- `backend/app/runtime/{executor,worker,state_machine,guardrails}.py` — DAG
-  executor, lifecycle, guardrails (max-agents, max-parallel, max-time,
-  max-cost, max-pivots)
-- `frontend/index.html` — landing page
-- `frontend/console.html` + `console.js` — chat console (composer, plan card,
-  agent timelines, pivot ribbon, evidence card with charts, live event feed)
-- `frontend/styles.css` — design system (tokens, typography, motion)
-- `docs/spec/` — normative spec (CONSTITUTION, SPEC, EVENTS, STATE_MACHINE,
-  DATA_MODEL, EXECUTION_SEMANTICS, COST_MODEL, PLANNING, API, UI_SPEC)
+```bash
+docker build -t atrium .
+docker run -p 8080:8080 -e OPENAI_API_KEY=your-key atrium
+```
 
-## Demo prompts
+## Run Tests
 
-- "Investigate a P1 incident: payments service latency is spiking…" → triggers
-  the pivot path
-- "Run an observability readiness review…"
-- "Audit our cost model: retention windows…"
+```bash
+pip install -e ".[dev,openai]"
+pytest tests/ -v
+```
+
+## Docs
+
+- [Getting Started](docs/getting-started.md)
+- [Writing Agents](docs/guide/writing-agents.md)
+- [Agent Patterns](docs/guide/agent-patterns.md)
+- [Testing](docs/guide/testing-agents.md)
+- [Concepts](docs/guide/concepts.md)
+
+## What's Inside
+
+- `src/atrium/core/` — Agent base class, registry, models, guardrails
+- `src/atrium/engine/` — LLM Commander, LangGraph graph builder, orchestrator
+- `src/atrium/streaming/` — Event recorder (SQLite-backed), SSE fan-out
+- `src/atrium/api/` — FastAPI with 14 endpoints + OpenAPI docs
+- `src/atrium/dashboard/` — Built-in real-time web console
+- `src/atrium/examples/` — hello_world (Wikipedia) + observe (SRE)
+- `docs/spec/` — Specification (matches implementation)
