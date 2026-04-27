@@ -19,6 +19,38 @@ def cmd_version(args):
     print(f"atrium {atrium.__version__}")
 
 
+def cmd_example_run(args):
+    """Run a bundled example."""
+    name = args.name
+    if name == "hello_world":
+        from atrium.examples.hello_world.app import app
+        app.serve()
+    elif name == "observe":
+        from atrium.examples.observe.app import app
+        app.serve()
+    else:
+        print(f"Unknown example: {name}")
+        print("Available examples: hello_world, observe")
+        sys.exit(1)
+
+
+def cmd_agents_list(args):
+    """List agents from bundled examples."""
+    print("Built-in example agents:\n")
+    print("hello_world:")
+    from atrium.examples.hello_world.agents import WikiSearchAgent, SummarizerAgent, FactCheckerAgent
+    for a in [WikiSearchAgent, SummarizerAgent, FactCheckerAgent]:
+        print(f"  {a.name:20s} {a.description}")
+
+    print("\nobserve:")
+    from atrium.examples.observe.agents.pathfinder import PathfinderAgent
+    from atrium.examples.observe.agents.mapper import MapperAgent
+    from atrium.examples.observe.agents.analyst import AnalystAgent
+    from atrium.examples.observe.agents.deep_diver import DeepDiverAgent
+    for a in [PathfinderAgent, MapperAgent, AnalystAgent, DeepDiverAgent]:
+        print(f"  {a.name:20s} {a.description}")
+
+
 def cmd_new_agent(args):
     name = args.name
     class_name = "".join(word.capitalize() for word in name.split("_")) + "Agent"
@@ -93,6 +125,19 @@ def main():
     agent_p = new_sub.add_parser("agent", help="Create a new agent")
     agent_p.add_argument("name", help="Agent name (snake_case)")
     agent_p.set_defaults(func=cmd_new_agent)
+
+    # example run
+    example_p = sub.add_parser("example", help="Run bundled examples")
+    example_sub = example_p.add_subparsers(dest="example_action")
+    run_p = example_sub.add_parser("run", help="Run an example")
+    run_p.add_argument("name", help="Example name (hello_world, observe)")
+    run_p.set_defaults(func=cmd_example_run)
+
+    # agents list
+    agents_p = sub.add_parser("agents", help="Agent operations")
+    agents_sub = agents_p.add_subparsers(dest="agents_action")
+    list_p = agents_sub.add_parser("list", help="List available agents")
+    list_p.set_defaults(func=cmd_agents_list)
 
     args = parser.parse_args()
     if hasattr(args, "func"):
