@@ -8,13 +8,28 @@ from atrium.api.schemas import AgentInfoResponse, AgentListResponse
 router = APIRouter()
 
 
+def _serialize_schema(schema: dict | None) -> dict | None:
+    """Convert Python type objects in schemas to string names for JSON."""
+    if schema is None:
+        return None
+    result = {}
+    for key, val in schema.items():
+        if isinstance(val, type):
+            result[key] = val.__name__
+        elif hasattr(val, "__origin__"):  # e.g. list[str]
+            result[key] = str(val)
+        else:
+            result[key] = str(val)
+    return result
+
+
 def _agent_info(cls) -> AgentInfoResponse:
     return AgentInfoResponse(
         name=cls.name,
         description=cls.description,
         capabilities=list(cls.capabilities),
-        input_schema=cls.input_schema,
-        output_schema=cls.output_schema,
+        input_schema=_serialize_schema(cls.input_schema),
+        output_schema=_serialize_schema(cls.output_schema),
     )
 
 
