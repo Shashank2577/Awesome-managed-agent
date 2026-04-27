@@ -5,6 +5,8 @@ import asyncio
 import json
 from typing import Any
 
+from atrium.streaming.bus import format_sse, format_sse_end
+
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import StreamingResponse
 
@@ -105,18 +107,11 @@ async def stream_thread(thread_id: str) -> StreamingResponse:
 
     async def _event_generator():
         if recorder is None:
-            yield "data: {}\n\n"
+            yield format_sse_end()
             return
         async for event in recorder.subscribe(thread_id):
-            payload = EventResponse(
-                event_id=event.event_id,
-                type=event.type,
-                payload=event.payload,
-                sequence=event.sequence,
-                timestamp=event.timestamp,
-                causation_id=event.causation_id,
-            ).model_dump(mode="json")
-            yield f"data: {json.dumps(payload)}\n\n"
+            yield format_sse(event)
+        yield format_sse_end()
 
     return StreamingResponse(
         _event_generator(),

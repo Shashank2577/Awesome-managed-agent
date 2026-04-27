@@ -5,7 +5,7 @@ import os
 from typing import Optional
 
 from fastapi import FastAPI
-from fastapi.responses import RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from atrium.api.middleware import setup_middleware
@@ -86,17 +86,17 @@ def create_app(
     app.include_router(registry_router.router, prefix="/api/v1")
 
     # Mount dashboard static files if available
-    dashboard_dir = os.path.join(os.path.dirname(__file__), "..", "dashboard", "dist")
+    dashboard_dir = os.path.join(os.path.dirname(__file__), "..", "dashboard", "static")
     dashboard_dir = os.path.normpath(dashboard_dir)
     if os.path.isdir(dashboard_dir):
-        app.mount("/dashboard", StaticFiles(directory=dashboard_dir, html=True), name="dashboard")
+        app.mount("/dashboard/static", StaticFiles(directory=dashboard_dir), name="dashboard-static")
 
         @app.get("/dashboard", include_in_schema=False)
-        async def dashboard_redirect():
-            return RedirectResponse(url="/dashboard/index.html")
+        async def serve_dashboard():
+            return FileResponse(os.path.join(dashboard_dir, "console.html"))
 
     @app.get("/", include_in_schema=False)
     async def root_redirect():
-        return RedirectResponse(url="/api/v1/health")
+        return RedirectResponse(url="/dashboard")
 
     return app
