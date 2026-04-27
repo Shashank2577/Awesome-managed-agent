@@ -48,9 +48,12 @@ async def _run_orchestrator(thread_id: str, objective: str) -> None:
         thread.status = ThreadStatus.RUNNING
 
     try:
-        await orchestrator.run(objective=objective, thread_id=thread_id)
+        result = await orchestrator.run(objective=objective, thread_id=thread_id)
         if thread:
-            thread.status = ThreadStatus.COMPLETED
+            if result.get("status") == "FAILED":
+                thread.status = ThreadStatus.FAILED
+            else:
+                thread.status = ThreadStatus.COMPLETED
     except Exception:
         if thread:
             thread.status = ThreadStatus.FAILED
