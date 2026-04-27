@@ -39,38 +39,28 @@ Rules:
 - Do not include any text outside the JSON object.
 """
 
-EVAL_SYSTEM_PROMPT = """\
-You are an execution evaluator. Given the objective and the outputs produced so far,
-decide whether to finalize or pivot.
+EVAL_SYSTEM_PROMPT = """You are the Commander evaluating agent outputs.
 
-Objective: {objective}
+OBJECTIVE: {objective}
 
-Outputs collected so far:
+AGENT OUTPUTS:
 {outputs}
 
-Return ONLY valid JSON in one of these two shapes:
+Decide:
+- "finalize" if the results adequately address the objective
+- "pivot" if results are insufficient and more agents should run
 
-If the objective is sufficiently achieved:
+Return JSON:
 {{
-  "decision": "finalize",
-  "summary": "<brief summary of the result>"
-}}
-
-If more work is needed:
-{{
-  "decision": "pivot",
-  "rationale": "<why more work is needed>",
-  "new_steps": [
-    {{
-      "agent": "<agent name>",
-      "inputs": {{}},
-      "depends_on": []
-    }}
-  ]
-}}
-
-Do not include any text outside the JSON object.
-"""
+  "decision": "finalize" or "pivot",
+  "summary": "2-3 sentence executive summary",
+  "findings": [
+    {{"severity": "high" or "med" or "low", "text": "description of finding"}}
+  ],
+  "recommendations": ["actionable recommendation"],
+  "rationale": "Why you chose this decision",
+  "new_steps": []
+}}"""
 
 
 # ---------------------------------------------------------------------------
@@ -94,6 +84,8 @@ class EvalDecision:
     summary: str = ""
     rationale: str = ""
     new_steps: list[PlanStep] = field(default_factory=list)
+    findings: list[dict] = field(default_factory=list)
+    recommendations: list[str] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -203,4 +195,6 @@ class Commander:
             summary=summary,
             rationale=rationale,
             new_steps=new_steps,
+            findings=raw.get("findings", []),
+            recommendations=raw.get("recommendations", []),
         )

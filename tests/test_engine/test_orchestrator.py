@@ -51,6 +51,8 @@ async def test_orchestrator_runs_thread(registry, recorder):
     mock_eval_decision = MagicMock()
     mock_eval_decision.action = "finalize"
     mock_eval_decision.summary = "Done"
+    mock_eval_decision.findings = []
+    mock_eval_decision.recommendations = []
 
     with patch.object(orchestrator._commander, "plan", new_callable=AsyncMock, return_value=mock_plan):
         with patch.object(orchestrator._commander, "evaluate", new_callable=AsyncMock, return_value=mock_eval_decision):
@@ -81,6 +83,8 @@ async def test_orchestrator_emits_plan_events(registry, recorder):
     mock_eval_decision = MagicMock()
     mock_eval_decision.action = "finalize"
     mock_eval_decision.summary = "OK"
+    mock_eval_decision.findings = []
+    mock_eval_decision.recommendations = []
 
     with patch.object(orchestrator._commander, "plan", new_callable=AsyncMock, return_value=mock_plan):
         with patch.object(orchestrator._commander, "evaluate", new_callable=AsyncMock, return_value=mock_eval_decision):
@@ -91,6 +95,8 @@ async def test_orchestrator_emits_plan_events(registry, recorder):
     assert "PLAN_CREATED" in types
     assert "PLAN_EXECUTION_STARTED" in types
     assert "PLAN_COMPLETED" in types
+    assert "BUDGET_RESERVED" in types
+    assert "BUDGET_CONSUMED" in types
 
 
 async def test_orchestrator_handles_plan_failure(registry, recorder):

@@ -11,6 +11,16 @@ from atrium.engine.graph_builder import build_graph_from_plan
 from atrium.streaming.events import EventRecorder
 
 
+def _build_severity_chart(findings: list[dict]) -> list[dict]:
+    """Build a simple bar chart from finding severities."""
+    counts = {"high": 0, "med": 0, "low": 0}
+    for f in findings:
+        sev = f.get("severity", "low")
+        if sev in counts:
+            counts[sev] += 1
+    return [{"label": k, "value": v} for k, v in counts.items() if v > 0]
+
+
 class ThreadOrchestrator:
     """Runs a complete thread: plan -> execute -> evaluate -> pivot/finalize."""
 
@@ -35,6 +45,12 @@ class ThreadOrchestrator:
 
         # Phase 1: Thread creation (emitted before try so thread_id is always recorded)
         await self._recorder.emit(tid, "THREAD_CREATED", {"objective": objective, "thread_id": tid})
+        await self._recorder.emit(tid, "BUDGET_RESERVED", {
+            "currency": "USD",
+            "allocated": str(self._guardrails.config.max_cost_usd),
+            "consumed": "0.00",
+            "hard_limit": str(self._guardrails.config.max_cost_usd),
+        })
 
         try:
             await self._recorder.emit(tid, "THREAD_PLANNING", {"objective": objective})
@@ -47,6 +63,11 @@ class ThreadOrchestrator:
             # Phase 2: Plan
             plan = await self._commander.plan(objective)
             plan.thread_id = tid
+            await self._recorder.emit(tid, "BUDGET_CONSUMED", {
+                "currency": "USD",
+                "consumed": "0.10",  # estimated planning cost
+                "hard_limit": str(self._guardrails.config.max_cost_usd),
+            })
 
             await self._recorder.emit(
                 tid,
@@ -96,6 +117,11 @@ class ThreadOrchestrator:
 
             # Phase 4: Evaluate (and pivot loop)
             decision = await self._commander.evaluate(objective, outputs)
+            await self._recorder.emit(tid, "BUDGET_CONSUMED", {
+                "currency": "USD",
+                "consumed": "0.20",  # estimated total
+                "hard_limit": str(self._guardrails.config.max_cost_usd),
+            })
 
             pivot_count = 0
             while decision.action == "pivot" and getattr(decision, "new_steps", None):
@@ -154,11 +180,15 @@ class ThreadOrchestrator:
                 tid,
                 "EVIDENCE_PUBLISHED",
                 {
-                    "headline": getattr(decision, "summary", None) or "Analysis Complete",
-                    "summary": getattr(decision, "summary", ""),
-                    "findings": [],
-                    "recommendations": [],
-                    "chart": {"type": "bar", "title": "Results", "series": []},
+                    "headline": decision.summary or "Analysis Complete",
+                    "summary": decision.summary,
+                    "findings": decision.findings,
+                    "recommendations": decision.recommendations,
+                    "chart": {
+                        "type": "bar",
+                        "title": "Findings by Severity",
+                        "series": _build_severity_chart(decision.findings),
+                    },
                 },
             )
             await self._recorder.emit(tid, "THREAD_COMPLETED", {"thread_id": tid})
