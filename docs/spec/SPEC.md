@@ -1,151 +1,72 @@
-# SPEC.md
+# Atrium Specification
 
 ## 1. System Model
 
-Agent OS is composed of:
-- Control Plane (Commander)
-- Execution Plane (Workers)
-- Agent Runtime
-- Tool System
-- Event Layer
-- UI Layer
+Atrium wraps LangGraph as the execution engine. The system is composed of:
 
----
+- **Agent Layer** — User-defined Agent subclasses with name, description, capabilities, run()
+- **Registry** — Holds registered agents, exposes manifests for the Commander
+- **Commander** — LLM-powered planner that reads the registry and generates execution plans
+- **Graph Builder** — Compiles Commander plans into LangGraph StateGraphs
+- **Event Recorder** — Append-only event log with per-thread sequencing, SSE fan-out, SQLite persistence
+- **Guardrails** — Enforces cost, time, parallelism, and pivot limits
+- **API Layer** — FastAPI with 14 REST endpoints + SSE streaming
+- **Dashboard** — Built-in web UI for real-time execution visualization
+- **HITL Controller** — Pause, resume, cancel, approve, reject via ThreadController
 
 ## 2. Agent Lifecycle
 
-States:
-CREATED → REGISTERED → READY → QUEUED → RUNNING → WAITING → COMPLETED | FAILED | TERMINATED
+The Commander plans which agents to run. The framework manages lifecycle automatically:
 
-Rules:
-- Agents MUST NOT skip states
-- WAITING indicates dependency
-- TERMINATED is final state
+1. Commander generates a Plan (list of steps with agents, inputs, dependencies)
+2. Graph Builder compiles the Plan into a LangGraph StateGraph
+3. LangGraph executes the graph — parallel fan-out for independent steps
+4. Each agent node: create instance → wire emitter → call run() → emit events
+5. Commander evaluates outputs — finalize or pivot
+6. On pivot: generate new plan, execute, evaluate again (capped by max_pivots guardrail)
 
----
+## 3. Event Taxonomy
 
-## 3. Agent Registration
+All events are typed, sequenced per-thread, and persisted to SQLite:
 
-POST /agents/register
+- Thread: THREAD_CREATED, THREAD_PLANNING, THREAD_RUNNING, THREAD_COMPLETED, THREAD_FAILED, THREAD_CANCELLED, THREAD_PAUSED
+- Plan: PLAN_CREATED, PLAN_APPROVED, PLAN_REJECTED, PLAN_EXECUTION_STARTED, PLAN_COMPLETED
+- Agent: AGENT_HIRED, AGENT_RUNNING, AGENT_COMPLETED, AGENT_FAILED, AGENT_MESSAGE, AGENT_OUTPUT
+- Commander: COMMANDER_MESSAGE, PIVOT_REQUESTED, PIVOT_APPLIED
+- HITL: HUMAN_APPROVAL_REQUESTED, HUMAN_INPUT_RECEIVED
+- Budget: BUDGET_RESERVED, BUDGET_CONSUMED, BUDGET_EXCEEDED
+- Evidence: EVIDENCE_PUBLISHED
 
-```
-{
-  "agent_type": "string",
-  "capabilities": ["string"],
-  "tools": ["tool_id"],
-  "execution_mode": "sync | async",
-  "visibility": "public | private | system"
-}
-```
-
----
-
-## 4. Tool System
-
-Tool:
-```
-{
-  "tool_id": "string",
-  "input_schema": {},
-  "endpoint": "url",
-  "timeout": number
-}
-```
-
-Flow:
-Agent → Event → Worker → Tool → Result Event
-
----
-
-## 5. Commander Model
-
-Loop:
-Input → Plan → Execute → Evaluate → Pivot or Finish
-
----
-
-## 6. Communication Model
-
-- Agents communicate only via events
-- No direct calls allowed
-
----
-
-## 7. UI Interaction
-
-UI subscribes to event stream.
-
-Actions:
-- approve
-- reject
-- pause
-- resume
-- provide input
-
----
-
-## 8. Visibility
-
-Modes:
-- public
-- private
-- system
-
----
-
-## 9. Waiting vs Termination
-
-WAITING:
-- tool pending
-- user input
-
-TERMINATED:
-- completed
-- failed
-- cancelled
-
----
-
-## 10. Event Contract
+## 4. API Endpoints
 
 ```
-{
-  "event_id": "string",
-  "type": "string",
-  "source": "string",
-  "target": "string",
-  "payload": {},
-  "timestamp": "ISO"
-}
+GET  /api/v1/health
+POST /api/v1/threads
+GET  /api/v1/threads
+GET  /api/v1/threads/{id}
+GET  /api/v1/threads/{id}/stream    (SSE)
+DELETE /api/v1/threads/{id}
+POST /api/v1/threads/{id}/pause
+POST /api/v1/threads/{id}/resume
+POST /api/v1/threads/{id}/cancel
+POST /api/v1/threads/{id}/approve
+POST /api/v1/threads/{id}/reject
+POST /api/v1/threads/{id}/input
+GET  /api/v1/agents
+GET  /api/v1/agents/{name}
 ```
 
----
+## 5. Guardrails
 
-## 11. Execution Rules
+Configurable limits enforced during execution:
+- max_agents (default: 25)
+- max_parallel (default: 5)
+- max_time_seconds (default: 600)
+- max_cost_usd (default: $10.00)
+- max_pivots (default: 2)
 
-- Idempotent agents required
-- Retry with backoff
-- At-least-once execution
+## 6. Dependencies
 
----
+langgraph, langchain-core, langgraph-checkpoint-sqlite, fastapi, uvicorn, httpx, pydantic, aiosqlite
 
-## 12. Guardrails
-
-- max_agents
-- max_parallel
-- max_time
-- max_cost
-- max_pivots
-
----
-
-## 13. Extensibility
-
-- Agent plugins
-- Tool plugins
-- UI plugins
-- Model providers
-
----
-
-END
+Optional: langchain-openai, langchain-anthropic, langchain-google-genai

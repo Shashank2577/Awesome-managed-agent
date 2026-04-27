@@ -1,127 +1,57 @@
-# EVENTS.md
+# Event Taxonomy
 
-## 1. Principles
+All events are AtriumEvent instances with type, payload, and monotonic sequence number.
 
-- Events are the sole communication primitive.
-- Events are immutable and append-only.
-- Every event type has a schema and validation contract.
+## Thread Lifecycle
+| Event | Payload | When |
+|---|---|---|
+| THREAD_CREATED | objective, thread_id | Thread starts |
+| THREAD_PLANNING | objective | Commander begins planning |
+| THREAD_RUNNING | plan_id | Execution starts |
+| THREAD_PAUSED | by | Operator pauses |
+| THREAD_COMPLETED | thread_id | All done |
+| THREAD_FAILED | error, thread_id | Unrecoverable error |
+| THREAD_CANCELLED | thread_id | Operator cancelled |
 
----
+## Plan Lifecycle
+| Event | Payload | When |
+|---|---|---|
+| PLAN_CREATED | plan_id, plan_number, rationale, graph | Commander creates plan |
+| PLAN_APPROVED | plan_id | Human approves (if require_approval=True) |
+| PLAN_REJECTED | plan_id | Human rejects |
+| PLAN_EXECUTION_STARTED | plan_id | Graph execution begins |
+| PLAN_COMPLETED | plan_id | All agents done |
 
-## 2. Envelope
+## Agent Lifecycle
+| Event | Payload | When |
+|---|---|---|
+| AGENT_HIRED | agent_key, role, objective, depends_on | Plan includes this agent |
+| AGENT_RUNNING | agent_key | Agent starts executing |
+| AGENT_COMPLETED | agent_key | Agent finished successfully |
+| AGENT_FAILED | agent_key, error | Agent threw exception |
+| AGENT_MESSAGE | agent_key, text | Agent called self.say() |
+| AGENT_OUTPUT | agent_key, output | Agent returned results |
 
-All events use the canonical envelope from `DATA_MODEL.md` Event entity.
+## Commander
+| Event | Payload | When |
+|---|---|---|
+| COMMANDER_MESSAGE | text, phase | Commander thinking/explaining |
+| PIVOT_REQUESTED | rationale | Evaluator decides to pivot |
+| PIVOT_APPLIED | added_agents | New agents added after pivot |
 
-Required envelope fields:
-- `event_id`
-- `org_id`
-- `thread_id`
-- `type`
-- `source`
-- `target` (optional)
-- `payload`
-- `causation_id` (optional)
-- `correlation_id` (optional)
-- `sequence`
-- `timestamp`
+## Budget
+| Event | Payload | When |
+|---|---|---|
+| BUDGET_RESERVED | currency, allocated, consumed, hard_limit | Thread starts |
+| BUDGET_CONSUMED | currency, consumed, hard_limit | After LLM call |
 
----
+## Evidence
+| Event | Payload | When |
+|---|---|---|
+| EVIDENCE_PUBLISHED | headline, summary, findings, recommendations, chart | Final report |
 
-## 3. Event Type Taxonomy
-
-## 3.1 Thread Events
-- `THREAD_CREATED`
-- `THREAD_PLANNING_STARTED`
-- `THREAD_READY`
-- `THREAD_RUNNING`
-- `THREAD_WAITING`
-- `THREAD_PAUSED`
-- `THREAD_COMPLETED`
-- `THREAD_FAILED`
-- `THREAD_CANCELLED`
-- `THREAD_TERMINATED`
-
-## 3.2 Plan Events
-- `PLAN_CREATED`
-- `PLAN_APPROVED`
-- `PLAN_REJECTED`
-- `PLAN_EXECUTION_STARTED`
-- `PLAN_COMPLETED`
-- `PLAN_FAILED`
-- `PLAN_SUPERSEDED`
-
-## 3.3 Node Events
-- `NODE_READY`
-- `NODE_QUEUED`
-- `NODE_RUNNING`
-- `NODE_WAITING`
-- `NODE_RETRYING`
-- `NODE_SUCCEEDED`
-- `NODE_FAILED`
-- `NODE_SKIPPED`
-- `NODE_CANCELLED`
-
-## 3.4 Agent Events
-- `AGENT_CREATED`
-- `AGENT_REGISTERED`
-- `AGENT_READY`
-- `AGENT_QUEUED`
-- `AGENT_RUNNING`
-- `AGENT_WAITING`
-- `AGENT_COMPLETED`
-- `AGENT_FAILED`
-- `AGENT_TERMINATED`
-
-## 3.5 Tool Events
-- `TOOL_INVOCATION_QUEUED`
-- `TOOL_INVOCATION_STARTED`
-- `TOOL_INVOCATION_SUCCEEDED`
-- `TOOL_INVOCATION_FAILED`
-- `TOOL_INVOCATION_TIMED_OUT`
-
-## 3.6 Budget & Guardrail Events
-- `BUDGET_RESERVED`
-- `BUDGET_CONSUMED`
-- `BUDGET_WARNING`
-- `BUDGET_EXHAUSTED`
-- `GUARDRAIL_VIOLATION`
-
-## 3.7 Control Plane Events
-- `COMMAND_RECEIVED`
-- `PLAN_GENERATION_STARTED`
-- `PLAN_GENERATION_COMPLETED`
-- `PIVOT_REQUESTED`
-- `PIVOT_APPLIED`
-
-## 3.8 Human-in-the-Loop Events
-- `HUMAN_APPROVAL_REQUESTED`
-- `HUMAN_APPROVED`
-- `HUMAN_REJECTED`
-- `HUMAN_INPUT_RECEIVED`
-
-## 3.9 System Events
-- `CHECKPOINT_CREATED`
-- `RESUME_REQUESTED`
-- `RESUME_COMPLETED`
-- `STATE_TRANSITION_REJECTED`
-- `DEAD_LETTER_ENQUEUED`
-
----
-
-## 4. Ordering and Delivery
-
-- Per-thread ordering: strict by `sequence`.
-- Delivery semantics: at-least-once.
-- Consumers must implement idempotency using `event_id`.
-
----
-
-## 5. Validation Rules
-
-- Unknown event type is rejected.
-- Payload schema mismatch is rejected.
-- Missing causation in derived events is warned (not fatal for root events).
-
----
-
-END
+## HITL
+| Event | Payload | When |
+|---|---|---|
+| HUMAN_APPROVAL_REQUESTED | plan_id, message | Waiting for approval |
+| HUMAN_INPUT_RECEIVED | input | Human provided input |

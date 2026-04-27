@@ -1,55 +1,33 @@
-# CONSTITUTION.md
+# Constitution
 
-## 1. Purpose
+## Core Laws
 
-Define immutable principles governing Agent OS.
+### 1. Event-Driven Execution ✅ ENFORCED
+All agent lifecycle transitions emit events. EventRecorder captures everything.
 
----
+### 2. Explicit Execution Graph ✅ ENFORCED
+Commander generates plans as DAGs. Graph Builder compiles to LangGraph StateGraphs.
 
-## 2. Core Laws
+### 3. Ephemeral Agents ✅ ENFORCED
+Agents are instantiated per-execution, stateless, isolated. No shared state between runs.
 
-### 1. Event-Driven Execution (MANDATORY)
-All interactions MUST be events.
+### 4. Deterministic Guardrails ✅ ENFORCED
+GuardrailEnforcer checks cost, time, parallelism, and pivot limits. Violations halt execution.
 
-### 2. Explicit Execution Graph (MANDATORY)
-All workflows MUST be graph-based and inspectable.
+### 5. Observable Execution ✅ ENFORCED
+All events persisted to SQLite with sequence numbers. SSE streaming to dashboard.
 
-### 3. Ephemeral Agents (MANDATORY)
-Agents MUST be stateless and isolated.
+### 6. Human-in-the-Loop ✅ ENFORCED
+ThreadController supports pause, resume, cancel, approve, reject. Optional per-thread.
 
-### 4. Deterministic Guardrails (MANDATORY)
-All LLM behavior MUST be bounded.
+### 7. Separation of Concerns ✅ ENFORCED
+Core, Engine, Streaming, API, Dashboard are independent layers with clear interfaces.
 
-### 5. Observable Execution (MANDATORY)
-All actions MUST be traceable.
+### 8. Extensibility ✅ ENFORCED
+Agents are pluggable (subclass Agent). LLM providers are pluggable (openai/anthropic/google). Storage is pluggable (SQLite default).
 
-### 6. Human-in-the-Loop (MANDATORY)
-Execution MUST support pause, resume, and override.
+### 9. Fault Tolerance ⚠️ PARTIAL
+Orchestrator catches exceptions and emits THREAD_FAILED. No retry/backoff yet.
 
-### 7. Separation of Concerns (MANDATORY)
-Control, Execution, Event, and State layers MUST be independent.
-
-### 8. Extensibility First (MANDATORY)
-Agents, tools, and models MUST be pluggable.
-
-### 9. Fault Tolerance (MANDATORY)
-System MUST handle retries and partial failures.
-
-### 10. Cost Awareness (MANDATORY)
-Execution MUST respect budget constraints.
-
----
-
-## 3. Enforcement
-
-Any violation MUST be rejected during design and review.
-
----
-
-## 4. Evolution
-
-Changes MUST be versioned and justified.
-
----
-
-END
+### 10. Cost Awareness ⚠️ PARTIAL
+Budget events emitted. Guardrail checks cost limits. Actual token-level tracking not yet implemented.
