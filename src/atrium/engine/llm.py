@@ -27,7 +27,7 @@ def detect_llm() -> str:
     import os
 
     if os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY"):
-        return "gemini:gemini-2.0-flash"
+        return "gemini:gemini-2.5-flash"
     if os.getenv("OPENAI_API_KEY"):
         return "openai:gpt-4o-mini"
     if os.getenv("ANTHROPIC_API_KEY"):
@@ -63,7 +63,7 @@ class LLMClient:
             from langchain_google_genai import ChatGoogleGenerativeAI
             # Support both GEMINI_API_KEY and GOOGLE_API_KEY
             api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
-            kwargs = {"model": self._model or "gemini-2.0-flash"}
+            kwargs = {"model": self._model or "gemini-2.5-flash"}
             if api_key:
                 kwargs["google_api_key"] = api_key
             return ChatGoogleGenerativeAI(**kwargs)
