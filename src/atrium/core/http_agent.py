@@ -102,4 +102,8 @@ def create_agent_class(config: dict[str, Any]) -> type[Agent]:
     ConfiguredHTTPAgent.__name__ = f"{agent_name}_Agent"
     ConfiguredHTTPAgent.__qualname__ = f"{agent_name}_Agent"
 
+    # Propagate category and agent_type so _agent_info() can read them
+    ConfiguredHTTPAgent.category = config.get("category")
+    ConfiguredHTTPAgent.agent_type = config.get("agent_type", "http")
+
     return ConfiguredHTTPAgent

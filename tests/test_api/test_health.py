@@ -8,7 +8,7 @@ from atrium.core.registry import AgentRegistry
 
 @pytest.fixture
 def app():
-    return create_app(registry=AgentRegistry())
+    return create_app(registry=AgentRegistry(), db_path=":memory:")
 
 
 async def test_health(app):

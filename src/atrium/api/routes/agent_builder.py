@@ -5,7 +5,9 @@ from __future__ import annotations
 from typing import Literal
 
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, field_validator, model_validator
+
+from atrium.core.categories import VALID_CATEGORIES
 
 router = APIRouter()
 
@@ -27,6 +29,17 @@ class CreateAgentRequest(BaseModel):
     category: str | None = None
     system_prompt: str | None = None
     model: str | None = None
+
+    @field_validator("category", mode="after")
+    @classmethod
+    def _validate_category(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        if v not in VALID_CATEGORIES:
+            raise ValueError(
+                f"Invalid category '{v}'. Must be one of: {sorted(VALID_CATEGORIES)}"
+            )
+        return v
 
     @model_validator(mode="after")
     def _validate_type_fields(self) -> "CreateAgentRequest":
@@ -67,7 +80,10 @@ async def create_agent(req: CreateAgentRequest) -> dict:
         pass
 
     # Create the Agent subclass and register it
-    agent_cls = agent_factory.build_agent_class(config)
+    try:
+        agent_cls = agent_factory.build_agent_class(config)
+    except NotImplementedError as e:
+        raise HTTPException(status_code=501, detail=str(e))
     registry.register(agent_cls)
 
     # Persist so the agent survives restarts
