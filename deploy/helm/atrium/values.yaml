@@ -1,0 +1,34 @@
+image:
+  repository: atrium-api
+  tag: latest
+  pullPolicy: IfNotPresent
+
+replicas:
+  api: 3
+  webhookWorker: 1
+
+sandbox:
+  backend: kubernetes
+  imageRegistry: atrium
+  namespace: atrium-sandbox
+  storageClass: standard
+
+database:
+  url: ""
+  secretName: ""
+
+ingress:
+  enabled: true
+  host: atrium.example.com
+  tls:
+    enabled: false
+    secretName: ""
+
+resources:
+  api:
+    requests:
+      cpu: "500m"
+      memory: "512Mi"
+    limits:
+      cpu: "1000m"
+      memory: "1024Mi"

@@ -45,17 +45,52 @@ async def _run_with_agent_sdk(model: str, system_prompt: str | None, objective: 
         emit({"type": "result", "subtype": "error", "message": "claude-agent-sdk-python not installed"})
         return
 
+    checkpoint_path = os.environ.get("ATRIUM_CHECKPOINT_PATH")
+    history = None
+    tool_calls_so_far = 0
+
+    if checkpoint_path and os.path.exists(checkpoint_path):
+        try:
+            with open(checkpoint_path, "r") as f:
+                cp = json.load(f)
+                history = cp.get("history")
+                tool_calls_so_far = cp.get("tool_calls_so_far", 0)
+        except Exception as e:
+            print(f"Failed to load checkpoint: {e}", file=sys.stderr)
+
     agent = ClaudeAgent(
         model=model,
         system_prompt=system_prompt,
         workspace_dir=os.environ.get("ATRIUM_WORKSPACE_DIR", "/workspace"),
         stream=True,
+        history=history,
     )
 
     emit({"type": "system", "subtype": "init", "model": model})
 
     async for event in agent.run(objective):
         emit(event)
+        
+        if event.get("type") == "tool_use":
+            tool_calls_so_far += 1
+            if checkpoint_path and tool_calls_so_far % 5 == 0:
+                try:
+                    cp = {
+                        "history": getattr(agent, "get_history", lambda: [])(),
+                        "tool_calls_so_far": tool_calls_so_far,
+                    }
+                    tmp_path = checkpoint_path + ".tmp"
+                    with open(tmp_path, "w") as f:
+                        json.dump(cp, f)
+                    os.rename(tmp_path, checkpoint_path)
+                    emit({
+                        "type": "checkpoint",
+                        "tokens_so_far": 0,
+                        "tool_calls_so_far": tool_calls_so_far,
+                    })
+                except Exception as e:
+                    print(f"Failed to write checkpoint: {e}", file=sys.stderr)
+
         if event.get("type") == "result":
             break
 

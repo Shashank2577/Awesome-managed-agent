@@ -59,7 +59,18 @@ class HarnessAgent(Agent):
     # --- Injected by factory (not by subclass) ---
     _session_store: "SessionStore | None" = None
     _artifact_store: "ArtifactStore | None" = None
-    _sandbox_runner_cls = InMemorySandboxRunner  # overridden to DockerSandboxRunner in prod
+
+    @property
+    def _sandbox_runner_cls(self):
+        backend = os.getenv("ATRIUM_SANDBOX_BACKEND", "inmemory")
+        if backend == "kubernetes":
+            from atrium.harness.sandbox import KubernetesSandboxRunner
+            return KubernetesSandboxRunner
+        elif backend == "docker":
+            from atrium.harness.sandbox import DockerSandboxRunner
+            return DockerSandboxRunner
+        from atrium.harness.sandbox import InMemorySandboxRunner
+        return InMemorySandboxRunner
 
     async def run(self, input_data: dict) -> dict:
         """Drive one harness session end-to-end."""

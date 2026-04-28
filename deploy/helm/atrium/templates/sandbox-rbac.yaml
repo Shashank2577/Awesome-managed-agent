@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: {{ include "atrium.fullname" . }}-api
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "atrium.fullname" . }}-sandbox-manager
+  namespace: {{ .Values.sandbox.namespace }}
+rules:
+  - apiGroups: [""]
+    resources: ["pods", "persistentvolumeclaims", "pods/exec", "pods/log"]
+    verbs: ["get", "list", "watch", "create", "delete", "update", "patch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "atrium.fullname" . }}-sandbox-manager-binding
+  namespace: {{ .Values.sandbox.namespace }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "atrium.fullname" . }}-sandbox-manager
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "atrium.fullname" . }}-api
+    namespace: {{ .Release.Namespace }}

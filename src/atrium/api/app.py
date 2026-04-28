@@ -13,6 +13,7 @@ from fastapi.staticfiles import StaticFiles
 from atrium.api.middleware import setup_middleware
 from atrium.api.routes import health, threads, control, registry as registry_router
 from atrium.api.routes import agent_builder
+from atrium.api.routes import sessions, mcp_servers, webhooks, widgets, artifacts
 from atrium.core import logging as atrium_logging
 from atrium.core.agent_store import AgentStore
 from atrium.core.guardrails import GuardrailsConfig
@@ -21,6 +22,8 @@ from atrium.core.registry import AgentRegistry
 from atrium.core.thread_store import ThreadStore
 from atrium.engine.orchestrator import ThreadOrchestrator
 from atrium.streaming.events import EventRecorder
+from atrium.observability import tracing
+from prometheus_fastapi_instrumentator import Instrumentator
 
 # ---------------------------------------------------------------------------
 # Module-level state — set once by create_app, read by route modules
@@ -138,12 +141,22 @@ def create_app(
 
     setup_middleware(app)
 
+    # Observability
+    tracing.configure("atrium-api")
+    tracing.instrument_app(app)
+    Instrumentator().instrument(app).expose(app)
+
     # Include all route groups under /api/v1
     app.include_router(health.router, prefix="/api/v1")
     app.include_router(threads.router, prefix="/api/v1")
     app.include_router(control.router, prefix="/api/v1")
     app.include_router(registry_router.router, prefix="/api/v1")
     app.include_router(agent_builder.router, prefix="/api/v1")
+    app.include_router(sessions.router)
+    app.include_router(mcp_servers.router)
+    app.include_router(webhooks.router)
+    app.include_router(widgets.router)
+    app.include_router(artifacts.router)
 
     # Mount dashboard static files if available
     dashboard_dir = os.path.join(os.path.dirname(__file__), "..", "dashboard", "static")

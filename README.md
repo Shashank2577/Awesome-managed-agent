@@ -85,18 +85,34 @@ app.serve()
 atrium new agent price_checker
 ```
 
-## Docker
+## Docker & Production Deployment
 
+### Local Testing
 ```bash
-docker build -t atrium .
-docker run -p 8080:8080 -e GEMINI_API_KEY=your-key atrium
+docker build -t atrium-api .
+docker run -p 8080:8080 -e GEMINI_API_KEY=your-key atrium-api
 ```
 
 Run with the hello_world example pre-loaded:
-
 ```bash
-docker run -p 8080:8080 -e GEMINI_API_KEY=your-key atrium atrium example run hello_world
+docker run -p 8080:8080 -e GEMINI_API_KEY=your-key atrium-api atrium example run hello_world
 ```
+
+### Production via Helm (Kubernetes)
+Atrium is designed to run on Kubernetes for scalable, sandboxed execution.
+
+1. Configure `deploy/helm/atrium/values.yaml` (especially `sandbox.namespace`).
+2. Deploy the chart:
+   ```bash
+   helm upgrade --install atrium ./deploy/helm/atrium -n atrium-system --create-namespace
+   ```
+
+**Production Features:**
+- **OpenTelemetry & Prometheus:** Set `OTEL_EXPORTER_OTLP_ENDPOINT` for traces. Metrics available at `/metrics`.
+- **Async Webhooks:** Webhook delivery scales independently via the `atrium worker webhook-delivery` command.
+- **Isolated Sandboxes:** Sessions run in dedicated Pods via the `KubernetesSandboxRunner`.
+
+See `docs/operations/runbooks/` for operational guides (Deploy, Rollback, Stuck Sessions, Backfill).
 
 ## Agent Marketplace
 

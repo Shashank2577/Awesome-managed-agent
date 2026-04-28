@@ -1,0 +1,30 @@
+FROM python:3.12-slim AS builder
+
+WORKDIR /build
+COPY pyproject.toml uv.lock ./
+RUN pip install --no-cache-dir uv && \
+    uv sync --frozen --no-dev --extra all
+
+COPY src/ ./src/
+RUN uv build
+
+FROM python:3.12-slim AS runtime
+
+RUN useradd -u 10001 -m atrium && \
+    apt-get update && apt-get install -y --no-install-recommends \
+      ca-certificates curl && \
+    rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY --from=builder /build/dist/*.whl /tmp/
+RUN pip install --no-cache-dir /tmp/*.whl && rm /tmp/*.whl
+
+USER atrium
+EXPOSE 8080
+ENV PYTHONUNBUFFERED=1
+
+# Healthcheck via the existing /api/v1/health route.
+HEALTHCHECK --interval=10s --timeout=3s --start-period=20s \
+    CMD curl -fsS http://localhost:8080/api/v1/health || exit 1
+
+CMD ["uvicorn", "atrium.api.app:create_app", "--host", "0.0.0.0", "--port", "8080", "--factory"]

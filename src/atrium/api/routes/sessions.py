@@ -1,18 +1,24 @@
-"""Session management routes — list, get, pause, resume.
+"""Session management routes — full Phase-5 API surface.
 
-POST /api/v1/sessions/{id}/pause
-POST /api/v1/sessions/{id}/resume
-GET  /api/v1/sessions
-GET  /api/v1/sessions/{id}
+POST   /api/v1/sessions                     — create + start a session
+GET    /api/v1/sessions                     — list (status filter)
+GET    /api/v1/sessions/{id}               — detail
+GET    /api/v1/sessions/{id}/stream        — SSE live event stream
+POST   /api/v1/sessions/{id}/messages      — send follow-up message
+POST   /api/v1/sessions/{id}/pause         — checkpoint + exit
+POST   /api/v1/sessions/{id}/resume        — boot fresh sandbox w/ checkpoint
+POST   /api/v1/sessions/{id}/cancel        — terminate + archive
+DELETE /api/v1/sessions/{id}               — alias for cancel
 """
 from __future__ import annotations
 
 import asyncio
-import secrets
+import json
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException
-from pydantic import BaseModel
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi.responses import StreamingResponse
+from pydantic import BaseModel, Field
 
 from atrium.harness.session import SessionStatus, Session
 
@@ -29,6 +35,20 @@ router = APIRouter(prefix="/api/v1/sessions", tags=["sessions"])
 
 # Timeout for waiting for a clean pause (seconds)
 _PAUSE_TIMEOUT = 30.0
+# SSE heartbeat interval when no events arrive (seconds)
+_SSE_HEARTBEAT = 15.0
+
+
+class CreateSessionRequest(BaseModel):
+    """Body for POST /api/v1/sessions."""
+
+    agent: str = Field("", description="Registered HarnessAgent name")
+    objective: str = Field(..., description="Task description passed into the sandbox")
+    model_override: Optional[str] = Field(None, description="Override model (e.g. google:gemini-2.5-pro)")
+    timeout_seconds: int = Field(1800, ge=60, le=86400)
+    metadata: dict = Field(default_factory=dict)
+    runtime: str = Field("echo", description="Runtime name: echo | open_agent_sdk | direct_anthropic | openclaude")
+    model: str = Field("echo:test")
 
 
 class SessionResponse(BaseModel):
@@ -42,6 +62,12 @@ class SessionResponse(BaseModel):
     container_id: Optional[str]
     created_at: str
     last_active_at: str
+
+
+class MessageRequest(BaseModel):
+    """Body for POST /api/v1/sessions/{id}/messages."""
+
+    text: str = Field(..., min_length=1)
 
 
 def _sess_response(s: Session) -> SessionResponse:
@@ -204,3 +230,181 @@ async def resume_session(
         "session_id": session_id,
         "checkpoint_available": checkpoint_path is not None,
     }
+
+
+# ---------------------------------------------------------------------------
+# POST /api/v1/sessions (Create)
+# ---------------------------------------------------------------------------
+
+
+@router.post("", response_model=SessionResponse, status_code=201)
+async def create_session(
+    req: CreateSessionRequest,
+    workspace: "Workspace" = Depends(require_workspace),
+    state: "AppState" = Depends(lambda: AppState.instance()),
+) -> SessionResponse:
+    """Create and start a new session."""
+    sess_store = state.session_store
+    if sess_store is None:
+        raise HTTPException(503, "Session store not available")
+
+    session = await sess_store.create(
+        workspace_id=workspace.workspace_id,
+        objective=req.objective,
+        title=f"Session: {req.agent or req.runtime}",
+        runtime=req.runtime,
+        model=req.model_override or req.model,
+    )
+
+    await state.recorder.emit(
+        session.session_id,
+        "SESSION_CREATED",
+        {
+            "workspace_id": workspace.workspace_id,
+            "objective": req.objective,
+            "runtime": req.runtime,
+            "model": req.model_override or req.model,
+        },
+    )
+
+    # Note: In a full production implementation, we would dispatch the sandbox
+    # startup here (Phase 2/6 functionality).
+
+    return _sess_response(session)
+
+
+# ---------------------------------------------------------------------------
+# GET /api/v1/sessions/{session_id}/stream (SSE)
+# ---------------------------------------------------------------------------
+
+
+@router.get("/{session_id}/stream")
+async def stream_session(
+    session_id: str,
+    request: Request,
+    workspace: "Workspace" = Depends(require_workspace),
+    state: "AppState" = Depends(lambda: AppState.instance()),
+) -> StreamingResponse:
+    """Stream live events for a session via SSE."""
+    sess_store = state.session_store
+    if sess_store is None:
+        raise HTTPException(503, "Session store not available")
+
+    session = await sess_store.get(workspace.workspace_id, session_id)
+    if session is None:
+        raise HTTPException(404, "Session not found")
+
+    async def event_generator():
+        queue = asyncio.Queue()
+        await state.recorder.subscribe(session_id, queue)
+        try:
+            while True:
+                if await request.is_disconnected():
+                    break
+                try:
+                    event = await asyncio.wait_for(queue.get(), timeout=_SSE_HEARTBEAT)
+                    yield f"data: {json.dumps(event.payload)}\n\n"
+                except asyncio.TimeoutError:
+                    yield ": heartbeat\n\n"
+        finally:
+            await state.recorder.unsubscribe(session_id, queue)
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
+# POST /api/v1/sessions/{session_id}/messages
+# ---------------------------------------------------------------------------
+
+
+@router.post("/{session_id}/messages", status_code=201)
+async def send_message(
+    session_id: str,
+    req: MessageRequest,
+    workspace: "Workspace" = Depends(require_workspace),
+    state: "AppState" = Depends(lambda: AppState.instance()),
+) -> dict:
+    """Send a follow-up message into a running session."""
+    sess_store = state.session_store
+    if sess_store is None:
+        raise HTTPException(503, "Session store not available")
+
+    session = await sess_store.get(workspace.workspace_id, session_id)
+    if session is None:
+        raise HTTPException(404, "Session not found")
+
+    if session.status != SessionStatus.RUNNING:
+        raise HTTPException(409, f"Cannot send message to a session in status {session.status.value}")
+
+    # Emit the message event so the bridge/runtime can pick it up
+    await state.recorder.emit(
+        session_id,
+        "USER_MESSAGE",
+        {
+            "workspace_id": workspace.workspace_id,
+            "text": req.text,
+        },
+    )
+
+    return {"status": "sent", "session_id": session_id}
+
+
+# ---------------------------------------------------------------------------
+# POST /api/v1/sessions/{session_id}/cancel
+# ---------------------------------------------------------------------------
+
+
+@router.post("/{session_id}/cancel", status_code=202)
+async def cancel_session(
+    session_id: str,
+    workspace: "Workspace" = Depends(require_workspace),
+    state: "AppState" = Depends(lambda: AppState.instance()),
+) -> dict:
+    """Terminate and archive a session."""
+    sess_store = state.session_store
+    if sess_store is None:
+        raise HTTPException(503, "Session store not available")
+
+    session = await sess_store.get(workspace.workspace_id, session_id)
+    if session is None:
+        raise HTTPException(404, "Session not found")
+
+    if session.status in (SessionStatus.COMPLETED, SessionStatus.CANCELLED, SessionStatus.FAILED):
+        return {"status": "already_terminal", "session_id": session_id}
+
+    # Mark cancelled immediately
+    await sess_store.set_status(workspace.workspace_id, session_id, SessionStatus.CANCELLED)
+
+    await state.recorder.emit(
+        session_id,
+        "SESSION_CANCELLED",
+        {
+            "workspace_id": workspace.workspace_id,
+            "previous_status": session.status.value,
+        },
+    )
+
+    return {"status": "cancelled", "session_id": session_id}
+
+
+# ---------------------------------------------------------------------------
+# DELETE /api/v1/sessions/{session_id}
+# ---------------------------------------------------------------------------
+
+
+@router.delete("/{session_id}", status_code=202)
+async def delete_session(
+    session_id: str,
+    workspace: "Workspace" = Depends(require_workspace),
+    state: "AppState" = Depends(lambda: AppState.instance()),
+) -> dict:
+    """Alias for cancel_session (terminate + archive)."""
+    return await cancel_session(session_id, workspace, state)

@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "atrium.fullname" . }}-webhook-worker
+  labels:
+    app: atrium-webhook-worker
+spec:
+  replicas: {{ .Values.replicas.webhookWorker }}
+  selector:
+    matchLabels:
+      app: atrium-webhook-worker
+  template:
+    metadata:
+      labels:
+        app: atrium-webhook-worker
+    spec:
+      containers:
+        - name: worker
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          command: ["atrium", "worker", "webhook-delivery"]
+          envFrom:
+            - configMapRef:
+                name: {{ include "atrium.fullname" . }}-config
+            - secretRef:
+                name: {{ include "atrium.fullname" . }}-secrets

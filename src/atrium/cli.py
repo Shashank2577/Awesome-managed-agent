@@ -100,10 +100,52 @@ def cmd_agents_seed(args):
             print(f"  REPLACE {name}")
             replaced += 1
         else:
-            print(f"  CREATE  {name}")
+            print(f"  SEED {name}")
             created += 1
 
-    print(f"\nDone — created: {created}, replaced: {replaced}, invalid: {failed}")
+    print(f"Done. Seeded {created}, replaced {replaced}, skipped (invalid) {failed}.")
+
+
+def cmd_worker(args):
+    """Run a background worker."""
+    import asyncio
+    
+    if args.name == "webhook-delivery":
+        async def _run():
+            from atrium.streaming.webhooks import WebhookStore, WebhookDeliveryWorker
+            from atrium.streaming.events import EventRecorder
+            import logging
+            logging.basicConfig(level=logging.INFO)
+            
+            # Create store but open EventRecorder to share DB
+            recorder = EventRecorder(db_path=args.db_path)
+            await recorder.open()
+            # The WebhookStore creates its own connection to the same DB
+            store = WebhookStore(db_path=args.db_path)
+            await store.open()
+            
+            worker = WebhookDeliveryWorker(store=store, poll_interval=2.0, recorder=recorder)
+            worker.start()
+            print("Webhook delivery worker started. Press Ctrl+C to stop.")
+            try:
+                while True:
+                    await asyncio.sleep(3600)
+            except asyncio.CancelledError:
+                pass
+            except KeyboardInterrupt:
+                pass
+            finally:
+                await worker.stop()
+                await store.close()
+                await recorder.close()
+                
+        try:
+            asyncio.run(_run())
+        except KeyboardInterrupt:
+            print("\nWorker stopped.")
+    else:
+        print(f"Unknown worker: {args.name}")
+        sys.exit(1)
 
 
 def cmd_new_agent(args):
@@ -221,6 +263,12 @@ def main():
         help="SQLite database path (default: atrium_agents.db)",
     )
     seed_p.set_defaults(func=cmd_agents_seed)
+
+    # Worker
+    worker_p = sub.add_parser("worker", help="Run a background worker")
+    worker_p.add_argument("name", choices=["webhook-delivery"], help="Worker to run")
+    worker_p.add_argument("--db-path", default="atrium_events.db", help="Path to events DB")
+    worker_p.set_defaults(func=cmd_worker)
 
     args = parser.parse_args()
     if hasattr(args, "func"):

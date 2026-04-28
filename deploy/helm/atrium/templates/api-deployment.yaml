@@ -1,0 +1,32 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "atrium.fullname" . }}-api
+  labels:
+    app: atrium-api
+spec:
+  replicas: {{ .Values.replicas.api }}
+  selector:
+    matchLabels:
+      app: atrium-api
+  template:
+    metadata:
+      labels:
+        app: atrium-api
+    spec:
+      serviceAccountName: {{ include "atrium.fullname" . }}-api
+      containers:
+        - name: api
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: 8080
+              protocol: TCP
+          envFrom:
+            - configMapRef:
+                name: {{ include "atrium.fullname" . }}-config
+            - secretRef:
+                name: {{ include "atrium.fullname" . }}-secrets
+          resources:
+            {{- toYaml .Values.resources.api | nindent 12 }}

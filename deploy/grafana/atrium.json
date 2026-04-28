@@ -1,0 +1,46 @@
+{
+  "title": "Atrium API Dashboard",
+  "uid": "atrium-api",
+  "panels": [
+    {
+      "type": "timeseries",
+      "title": "Active Sessions",
+      "targets": [
+        {
+          "expr": "sum(atrium_sessions_active)",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Threads Started",
+      "targets": [
+        {
+          "expr": "rate(atrium_threads_started_total[5m])",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Token Consumption",
+      "targets": [
+        {
+          "expr": "rate(atrium_tokens_consumed_total[5m])",
+          "refId": "A"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "API Request Rate",
+      "targets": [
+        {
+          "expr": "rate(http_requests_total[5m])",
+          "refId": "A"
+        }
+      ]
+    }
+  ]
+}

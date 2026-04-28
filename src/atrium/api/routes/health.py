@@ -21,3 +21,9 @@ async def health() -> HealthResponse:
         version=__version__,
         agents_registered=agents_registered,
     )
+
+
+@router.get("/version")
+async def version() -> dict:
+    """Return the Atrium version string."""
+    return {"version": __version__}

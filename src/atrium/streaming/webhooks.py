@@ -21,6 +21,7 @@ import aiosqlite
 
 if TYPE_CHECKING:
     from atrium.core.models import AtriumEvent
+    from atrium.streaming.events import EventRecorder
 
 logger = logging.getLogger(__name__)
 
@@ -339,9 +340,10 @@ class WebhookDeliveryWorker:
 
     MAX_ATTEMPTS = 6
 
-    def __init__(self, store: WebhookStore, poll_interval: float = 2.0) -> None:
+    def __init__(self, store: WebhookStore, poll_interval: float = 2.0, recorder: "EventRecorder | None" = None) -> None:
         self._store = store
         self._poll_interval = poll_interval
+        self._recorder = recorder
         self._running = False
         self._task: asyncio.Task | None = None
 
@@ -410,6 +412,11 @@ class WebhookDeliveryWorker:
 
             if 200 <= code < 300:
                 await self._store.mark_delivered(delivery.delivery_id, code)
+                if self._recorder:
+                    await self._recorder.emit(
+                        delivery.event_id, "WEBHOOK_DELIVERED",
+                        {"delivery_id": delivery.delivery_id, "webhook_id": webhook.webhook_id, "response_code": code}
+                    )
                 logger.info(
                     "Webhook delivered delivery=%s webhook=%s code=%s",
                     delivery.delivery_id, webhook.webhook_id, code
@@ -419,6 +426,11 @@ class WebhookDeliveryWorker:
                 await self._store.mark_failed(
                     delivery.delivery_id, f"HTTP {code}", code
                 )
+                if self._recorder:
+                    await self._recorder.emit(
+                        delivery.event_id, "WEBHOOK_FAILED",
+                        {"delivery_id": delivery.delivery_id, "webhook_id": webhook.webhook_id, "error": f"HTTP {code}", "permanent": True}
+                    )
             else:
                 # 429 / 5xx / other — retry with backoff
                 next_attempt = delivery.attempt + 1
@@ -426,6 +438,11 @@ class WebhookDeliveryWorker:
                     await self._store.mark_failed(
                         delivery.delivery_id, f"max_attempts exceeded (last: HTTP {code})", code
                     )
+                    if self._recorder:
+                        await self._recorder.emit(
+                            delivery.event_id, "WEBHOOK_FAILED",
+                            {"delivery_id": delivery.delivery_id, "webhook_id": webhook.webhook_id, "error": f"HTTP {code} (max attempts)", "permanent": True}
+                        )
                 else:
                     await self._store.schedule_retry(
                         delivery.delivery_id, next_attempt, f"HTTP {code}", code
@@ -434,6 +451,11 @@ class WebhookDeliveryWorker:
             next_attempt = delivery.attempt + 1
             if next_attempt > self.MAX_ATTEMPTS:
                 await self._store.mark_failed(delivery.delivery_id, str(exc))
+                if self._recorder:
+                    await self._recorder.emit(
+                        delivery.event_id, "WEBHOOK_FAILED",
+                        {"delivery_id": delivery.delivery_id, "webhook_id": webhook.webhook_id, "error": str(exc), "permanent": True}
+                    )
             else:
                 await self._store.schedule_retry(delivery.delivery_id, next_attempt, str(exc))
 

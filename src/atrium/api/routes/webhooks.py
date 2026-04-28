@@ -54,7 +54,7 @@ class DeliveryResponse(BaseModel):
 
 def _wh_response(wh) -> WebhookResponse:
     return WebhookResponse(
-        webhook_id=wh.webhook_id,
+        webhook_id=f"wh_{wh.webhook_id}",
         url=wh.url,
         events=wh.events,
         created_at=wh.created_at.isoformat(),
@@ -92,7 +92,8 @@ async def delete_webhook(
     workspace: "Workspace" = Depends(require_workspace),
     state: "AppState" = Depends(lambda: AppState.instance()),
 ) -> None:
-    deleted = await state.webhook_store.delete(webhook_id)
+    bare_id = webhook_id.removeprefix("wh_")
+    deleted = await state.webhook_store.delete(bare_id)
     if not deleted:
         raise HTTPException(404, detail="Webhook not found")
 
@@ -103,14 +104,30 @@ async def test_webhook(
     workspace: "Workspace" = Depends(require_workspace),
     state: "AppState" = Depends(lambda: AppState.instance()),
 ) -> dict:
-    wh = await state.webhook_store.get(webhook_id)
+    import json
+    import datetime
+    bare_id = webhook_id.removeprefix("wh_")
+    wh = await state.webhook_store.get(bare_id)
     if not wh or wh.workspace_id != workspace.workspace_id:
         raise HTTPException(404, detail="Webhook not found")
     # Synthesize a test event delivery
+    event_id = f"test-{secrets.token_hex(8)}"
     delivery = await state.webhook_store.create_delivery(
-        webhook_id=webhook_id,
-        event_id=f"test-{secrets.token_hex(8)}",
+        webhook_id=bare_id,
+        event_id=event_id,
     )
+    # Store full event body for the worker
+    body = json.dumps({
+        "event_id": event_id,
+        "type": "WEBHOOK_TEST",
+        "thread_id": "test",
+        "session_id": "test",
+        "workspace_id": workspace.workspace_id,
+        "payload": {"message": "Test webhook delivery"},
+        "sequence": 1,
+        "timestamp": datetime.datetime.now(datetime.timezone.utc).isoformat(),
+    }).encode()
+    object.__setattr__(delivery, "_body_cache", body)
     return {"delivery_id": delivery.delivery_id, "status": "queued"}
 
 
@@ -120,10 +137,11 @@ async def list_deliveries(
     workspace: "Workspace" = Depends(require_workspace),
     state: "AppState" = Depends(lambda: AppState.instance()),
 ) -> list[DeliveryResponse]:
-    wh = await state.webhook_store.get(webhook_id)
+    bare_id = webhook_id.removeprefix("wh_")
+    wh = await state.webhook_store.get(bare_id)
     if not wh or wh.workspace_id != workspace.workspace_id:
         raise HTTPException(404, detail="Webhook not found")
-    deliveries = await state.webhook_store.list_deliveries_for_webhook(webhook_id)
+    deliveries = await state.webhook_store.list_deliveries_for_webhook(bare_id)
     return [
         DeliveryResponse(
             delivery_id=d.delivery_id,
