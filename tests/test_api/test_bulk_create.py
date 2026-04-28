@@ -114,7 +114,7 @@ async def test_bulk_invalid_agent_skipped_batch_continues(app):
     body = {
         "agents": [
             _http_agent("valid_1"),
-            # missing description — Pydantic validation will fail
+            # missing description — per-item validation will catch this
             {"name": "invalid_no_desc", "agent_type": "http", "api_url": "https://x.com"},
             _http_agent("valid_2"),
         ],
@@ -124,19 +124,16 @@ async def test_bulk_invalid_agent_skipped_batch_continues(app):
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.post("/api/v1/agents/bulk", json=body)
 
-    # FastAPI/Pydantic should return 422 for an invalid item in the list; OR
-    # the route accepts whatever passes Pydantic and reports per-item errors.
-    # The route itself receives only validated CreateAgentRequest objects, so
-    # an item missing 'description' is caught by Pydantic BEFORE the handler
-    # runs and the whole request returns 422.
-    # We accept either 200 (per-item error) or 422 (request-level rejection)
-    # depending on implementation, but the batch must not 500.
-    assert resp.status_code in (200, 422)
+    # The batch never aborts — invalid items get status="error", valid items get status="created"
+    assert resp.status_code == 200
+    results = {r["name"]: r for r in resp.json()["results"]}
+    assert results["valid_1"]["status"] == "created"
+    assert results["invalid_no_desc"]["status"] == "error"
+    assert results["valid_2"]["status"] == "created"
 
 
 async def test_bulk_invalid_agent_soft_error_in_valid_batch(app):
-    """Two valid + one invalid (bad api_url field) — batch should contain results for valids."""
-    # We send all as structurally valid but one uses an invalid category
+    """Two valid + one invalid (bad category) — batch returns 200 with per-item error."""
     body = {
         "agents": [
             _http_agent("val_a"),
@@ -149,8 +146,12 @@ async def test_bulk_invalid_agent_soft_error_in_valid_batch(app):
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.post("/api/v1/agents/bulk", json=body)
 
-    # Invalid category fails Pydantic validation on the whole request (422)
-    assert resp.status_code == 422
+    # Invalid category is caught per-item — batch still returns 200
+    assert resp.status_code == 200
+    results = {r["name"]: r for r in resp.json()["results"]}
+    assert results["val_a"]["status"] == "created"
+    assert results["bad_cat"]["status"] == "error"
+    assert results["val_b"]["status"] == "created"
 
 
 async def test_bulk_empty_list_returns_empty_results(app):

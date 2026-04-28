@@ -84,7 +84,7 @@ def cmd_agents_seed(args):
     from atrium.api.routes.agent_builder import CreateAgentRequest
     from pydantic import ValidationError
 
-    created = skipped = failed = 0
+    created = replaced = failed = 0
     for raw in seeds:
         name = raw.get("name", "<unknown>")
         try:
@@ -98,12 +98,12 @@ def cmd_agents_seed(args):
         store.save(req.model_dump())
         if existing:
             print(f"  REPLACE {name}")
-            skipped += 1  # counted as replaced/skipped
+            replaced += 1
         else:
             print(f"  CREATE  {name}")
             created += 1
 
-    print(f"\nDone — created: {created}, replaced: {skipped}, invalid: {failed}")
+    print(f"\nDone — created: {created}, replaced: {replaced}, invalid: {failed}")
 
 
 def cmd_new_agent(args):

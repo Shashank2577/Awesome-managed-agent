@@ -59,7 +59,7 @@ class CreateAgentRequest(BaseModel):
 # ------------------------------------------------------------------
 
 class BulkCreateRequest(BaseModel):
-    agents: list[CreateAgentRequest] = []
+    agents: list[dict] = []
     mode: Literal["skip", "replace"] = "skip"
 
 
@@ -139,9 +139,20 @@ async def bulk_create_agents(req: BulkCreateRequest) -> BulkCreateResponse:
     if registry is None or store is None:
         raise HTTPException(500, "Server not fully initialized")
 
+    from pydantic import ValidationError
+
     results: list[BulkItemResult] = []
 
-    for agent_req in req.agents:
+    for raw_item in req.agents:
+        item_name = raw_item.get("name", "unknown") if isinstance(raw_item, dict) else "unknown"
+
+        # Validate individual item — never abort the batch for a bad item
+        try:
+            agent_req = CreateAgentRequest.model_validate(raw_item)
+        except (ValidationError, Exception) as exc:
+            results.append(BulkItemResult(name=item_name, status="error", detail=str(exc)))
+            continue
+
         name = agent_req.name
         existing = False
         try:
