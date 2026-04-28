@@ -80,12 +80,14 @@ async def get_agent_config(name: str) -> dict:
 
 @router.delete("/agents/{name}")
 async def delete_agent(name: str) -> dict:
-    """Remove a config-driven agent from persistent storage."""
-    from atrium.api.app import get_agent_store
+    """Remove a config-driven agent from registry and persistent storage."""
+    from atrium.api.app import get_agent_store, get_registry
 
     store = get_agent_store()
-    if store is None:
+    registry = get_registry()
+    if store is None or registry is None:
         raise HTTPException(500, "Server not fully initialized")
 
     store.delete(name)
+    registry.remove(name)
     return {"name": name, "status": "deleted"}

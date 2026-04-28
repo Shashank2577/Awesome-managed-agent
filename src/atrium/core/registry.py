@@ -38,6 +38,10 @@ class AgentRegistry:
             )
         self._agents[key] = agent_class
 
+    def remove(self, name: str) -> None:
+        """Remove an agent by name. No-op if not found."""
+        self._agents.pop(name, None)
+
     # ------------------------------------------------------------------
     # Lookup
     # ------------------------------------------------------------------
