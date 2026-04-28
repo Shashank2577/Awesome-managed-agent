@@ -39,16 +39,17 @@ def test_missing_agent_type_defaults_to_http():
     assert cls.name == "default_http"
 
 
-def test_llm_agent_type_raises_not_implemented():
-    """build_agent_class with agent_type='llm' raises NotImplementedError."""
+def test_llm_agent_type_returns_agent_subclass():
+    """build_agent_class with agent_type='llm' returns an Agent subclass."""
     config = {
         "name": "llm_agent",
         "description": "An LLM agent",
         "agent_type": "llm",
         "system_prompt": "You are helpful.",
     }
-    with pytest.raises(NotImplementedError, match="LLMAgent not yet implemented"):
-        build_agent_class(config)
+    cls = build_agent_class(config)
+    assert issubclass(cls, Agent)
+    assert cls.agent_type == "llm"
 
 
 def test_unknown_agent_type_raises_value_error():

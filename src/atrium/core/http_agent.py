@@ -7,6 +7,7 @@ from typing import Any
 import httpx
 
 from atrium.core.agent import Agent
+from atrium.core._input_utils import extract_query
 
 
 def create_agent_class(config: dict[str, Any]) -> type[Agent]:
@@ -41,21 +42,7 @@ def create_agent_class(config: dict[str, Any]) -> type[Agent]:
             self._config: dict[str, Any] = config
 
         async def run(self, input_data: dict) -> dict:
-            query = input_data.get("query", "")
-
-            # Fall back to upstream data when no explicit query
-            if not query:
-                upstream = input_data.get("upstream", {})
-                for v in upstream.values():
-                    if isinstance(v, dict):
-                        query = (
-                            v.get("query", "")
-                            or v.get("result", "")
-                            or str(v)[:100]
-                        )
-                        break
-                if not query:
-                    query = str(input_data)[:200]
+            query = extract_query(input_data)
 
             api_url = self._config.get("api_url", "")
             await self.say(f"Calling {api_url or 'API'}...")

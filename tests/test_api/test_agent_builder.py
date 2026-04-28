@@ -105,19 +105,18 @@ async def test_llm_agent_without_system_prompt_returns_422(app):
     assert resp.status_code == 422
 
 
-async def test_llm_agent_with_system_prompt_returns_501(app):
-    """agent_type='llm' with system_prompt passes validation but factory raises
-    NotImplementedError — the handler must return HTTP 501."""
+async def test_llm_agent_with_system_prompt_returns_201(app):
+    """agent_type='llm' with a valid system_prompt creates the agent (HTTP 201)."""
     payload = {
         "name": "future_llm_agent",
-        "description": "An LLM agent that is not yet implemented",
+        "description": "An LLM agent",
         "agent_type": "llm",
         "system_prompt": "You are a helpful assistant.",
     }
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.post("/api/v1/agents/create", json=payload)
-    assert resp.status_code == 501
+    assert resp.status_code == 201
 
 
 # ---------------------------------------------------------------------------
