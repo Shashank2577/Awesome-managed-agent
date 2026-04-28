@@ -9,8 +9,7 @@ RUN mkdir -p /workspace /app && chown -R atrium:atrium /workspace /app
 
 WORKDIR /app
 
-# Pin openclaude to a specific tagged release.
-RUN npm install -g openclaude@0.2.1
+RUN npm install -g @anthropic-ai/sdk
 
 COPY --chown=atrium:atrium openclaude_entrypoint.js /app/openclaude_entrypoint.js
 

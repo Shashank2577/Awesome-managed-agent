@@ -1,9 +1,7 @@
-// src/atrium/harness/dockerfiles/openclaude_entrypoint.js
-// Multi-model entrypoint using openclaude package.
-// Same JSON-line stdout shape as oas_entrypoint.js.
+// OpenClaude entrypoint — uses @anthropic-ai/sdk with extended thinking support.
+// Reads first stdin line as objective, emits claude_code_stream_json events.
 
-const { OpenClaude } = require('openclaude');
-const fs = require('fs');
+const Anthropic = require('@anthropic-ai/sdk');
 const readline = require('readline');
 
 function emit(event) {
@@ -12,57 +10,62 @@ function emit(event) {
 
 async function main() {
   const args = process.argv.slice(2);
-  let model = process.env.OPENCLAUDE_MODEL || 'anthropic:claude-sonnet-4-6';
+  let model = process.env.OPENCLAUDE_MODEL || 'claude-sonnet-4-6';
   let systemPromptPath = null;
-
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--model') model = args[++i];
     else if (args[i] === '--system-prompt-file') systemPromptPath = args[++i];
   }
 
-  const systemPrompt = systemPromptPath
-    ? fs.readFileSync(systemPromptPath, 'utf8')
-    : undefined;
+  if (model.includes(':')) model = model.split(':').slice(1).join(':');
 
-  // MCP gateway wiring — present if Atrium injected the socket path.
-  const mcpSocket = process.env.ATRIUM_MCP_SOCKET;
-  const sessionToken = process.env.ATRIUM_SESSION_TOKEN;
-
-  const agentOpts = {
-    model,
-    systemPrompt,
-    workspace: '/workspace',
-    streamEvents: true,
-  };
-
-  if (mcpSocket && sessionToken) {
-    agentOpts.mcpTransport = {
-      type: 'unix',
-      socketPath: mcpSocket,
-      sessionToken,
-    };
+  let systemPrompt = 'You are a capable AI assistant. Reason carefully and complete the objective.';
+  if (systemPromptPath) {
+    try { systemPrompt = require('fs').readFileSync(systemPromptPath, 'utf8'); } catch (_) {}
   }
 
-  const agent = new OpenClaude(agentOpts);
+  const rl = readline.createInterface({ input: process.stdin, terminal: false });
+  const objective = await new Promise(resolve => {
+    rl.once('line', line => { rl.close(); resolve(line.trim()); });
+  });
 
-  const rl = readline.createInterface({ input: process.stdin });
-  const lines = rl[Symbol.asyncIterator]();
-  const first = await lines.next();
-  if (first.done) {
-    emit({ type: 'result', subtype: 'error', message: 'no objective' });
-    process.exit(1);
-  }
-  const objective = first.value.trim();
-
+  const client = new Anthropic.Anthropic();
   emit({ type: 'system', subtype: 'init', model });
 
-  for await (const event of agent.run(objective)) {
-    emit(event);
-    if (event.type === 'result') break;
+  let fullText = '', thinkingText = '';
+  let inputTokens = 0, outputTokens = 0;
+
+  const stream = client.messages.stream({
+    model,
+    max_tokens: 16000,
+    thinking: { type: 'enabled', budget_tokens: 8000 },
+    system: systemPrompt,
+    messages: [{ role: 'user', content: objective }],
+  });
+
+  for await (const event of stream) {
+    if (event.type === 'content_block_delta') {
+      if (event.delta?.type === 'thinking_delta') thinkingText += event.delta.thinking;
+      else if (event.delta?.type === 'text_delta') fullText += event.delta.text;
+    }
   }
+
+  const final = await stream.finalMessage();
+  inputTokens = final.usage?.input_tokens || 0;
+  outputTokens = final.usage?.output_tokens || 0;
+
+  const content = [];
+  if (thinkingText) content.push({ type: 'thinking', thinking: thinkingText });
+  content.push({ type: 'text', text: fullText });
+
+  emit({
+    type: 'assistant',
+    message: { content, usage: { input_tokens: inputTokens, output_tokens: outputTokens } },
+  });
+  emit({ type: 'result', subtype: 'success', result: fullText });
 }
 
-main().catch((err) => {
-  emit({ type: 'result', subtype: 'error', message: String(err) });
+main().catch(err => {
+  process.stderr.write(String(err) + '\n');
   process.exit(1);
 });

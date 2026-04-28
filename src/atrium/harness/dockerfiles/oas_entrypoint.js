@@ -1,9 +1,7 @@
-// verbatim — src/atrium/harness/dockerfiles/oas_entrypoint.js
-// Reads stdin lines (objective + follow-up messages), drives the SDK,
-// writes one JSON event per line to stdout. Errors go to stderr.
+// Open Agent SDK entrypoint — uses @anthropic-ai/sdk to drive Claude.
+// Reads first stdin line as objective, streams response, emits claude_code_stream_json events.
 
-const { Agent } = require('@shipany/open-agent-sdk');
-const fs = require('fs');
+const Anthropic = require('@anthropic-ai/sdk');
 const readline = require('readline');
 
 function emit(event) {
@@ -12,80 +10,60 @@ function emit(event) {
 
 async function main() {
   const args = process.argv.slice(2);
-  let model = 'anthropic:claude-sonnet-4-6';
+  let model = 'claude-sonnet-4-6';
   let systemPromptPath = null;
   for (let i = 0; i < args.length; i++) {
     if (args[i] === '--model') model = args[++i];
     else if (args[i] === '--system-prompt-file') systemPromptPath = args[++i];
   }
 
-  const systemPrompt = systemPromptPath ? fs.readFileSync(systemPromptPath, 'utf8') : undefined;
+  // Strip provider prefix (e.g. "anthropic:claude-sonnet-4-6" → "claude-sonnet-4-6")
+  if (model.includes(':')) model = model.split(':').slice(1).join(':');
 
-  const checkpointPath = process.env.ATRIUM_CHECKPOINT_PATH;
-  let history = undefined;
-  let toolCallsSoFar = 0;
-
-  if (checkpointPath && fs.existsSync(checkpointPath)) {
-    try {
-      const data = fs.readFileSync(checkpointPath, 'utf8');
-      const cp = JSON.parse(data);
-      history = cp.history;
-      toolCallsSoFar = cp.tool_calls_so_far || 0;
-    } catch (err) {
-      console.error("Failed to load checkpoint:", err);
-    }
+  let systemPrompt = 'You are a capable AI assistant. Complete the user objective thoroughly.';
+  if (systemPromptPath) {
+    try { systemPrompt = require('fs').readFileSync(systemPromptPath, 'utf8'); } catch (_) {}
   }
 
-  const agent = new Agent({
-    model,
-    systemPrompt,
-    workspace: '/workspace',
-    streamEvents: true,
-    history,
+  const rl = readline.createInterface({ input: process.stdin, terminal: false });
+  const objective = await new Promise(resolve => {
+    rl.once('line', line => { rl.close(); resolve(line.trim()); });
   });
 
-  // First stdin line is the objective.
-  const rl = readline.createInterface({ input: process.stdin });
-  const lines = rl[Symbol.asyncIterator]();
-  const first = await lines.next();
-  if (first.done) {
-    emit({ type: 'result', subtype: 'error', message: 'no objective' });
-    process.exit(1);
-  }
-  const objective = first.value.trim();
-
+  const client = new Anthropic.Anthropic();
   emit({ type: 'system', subtype: 'init', model });
 
-  for await (const event of agent.run(objective)) {
-    emit(event);
+  let fullText = '';
+  let inputTokens = 0, outputTokens = 0;
 
-    if (event.type === 'tool_use') {
-      toolCallsSoFar++;
-      if (checkpointPath && toolCallsSoFar % 5 === 0) {
-        try {
-          const cp = {
-            history: agent.getHistory ? agent.getHistory() : [],
-            tool_calls_so_far: toolCallsSoFar
-          };
-          const tmpPath = checkpointPath + '.tmp';
-          fs.writeFileSync(tmpPath, JSON.stringify(cp));
-          fs.renameSync(tmpPath, checkpointPath);
-          emit({
-            type: 'checkpoint',
-            tokens_so_far: 0,
-            tool_calls_so_far: toolCallsSoFar
-          });
-        } catch (err) {
-          console.error("Failed to write checkpoint:", err);
-        }
-      }
+  const stream = client.messages.stream({
+    model,
+    max_tokens: 8192,
+    system: systemPrompt,
+    messages: [{ role: 'user', content: objective }],
+  });
+
+  for await (const event of stream) {
+    if (event.type === 'content_block_delta' && event.delta?.type === 'text_delta') {
+      fullText += event.delta.text;
     }
-
-    if (event.type === 'result') break;
   }
+
+  const final = await stream.finalMessage();
+  inputTokens = final.usage?.input_tokens || 0;
+  outputTokens = final.usage?.output_tokens || 0;
+
+  emit({
+    type: 'assistant',
+    message: {
+      content: [{ type: 'text', text: fullText }],
+      usage: { input_tokens: inputTokens, output_tokens: outputTokens },
+    },
+  });
+  emit({ type: 'result', subtype: 'success', result: fullText });
 }
 
-main().catch((err) => {
-  emit({ type: 'result', subtype: 'error', message: String(err) });
+main().catch(err => {
+  process.stderr.write(String(err) + '\n');
   process.exit(1);
 });

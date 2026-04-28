@@ -7,8 +7,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN useradd -u 10001 -m atrium
 RUN mkdir -p /workspace /app && chown -R atrium:atrium /workspace /app
 
-# Pin claude-agent-sdk-python. Bump intentionally via PR.
-RUN pip install --no-cache-dir anthropic==0.49.0 claude-agent-sdk-python==0.3.1
+RUN pip install --no-cache-dir "anthropic>=0.49.0"
 
 COPY --chown=atrium:atrium anthropic_entrypoint.py /app/anthropic_entrypoint.py
 

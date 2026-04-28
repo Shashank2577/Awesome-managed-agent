@@ -10,8 +10,7 @@ RUN mkdir -p /workspace /app && chown -R atrium:atrium /workspace /app
 
 WORKDIR /app
 
-# Pin the version. Bump intentionally via PR.
-RUN npm install -g @shipany/open-agent-sdk@0.4.2
+RUN npm install -g @anthropic-ai/sdk
 
 COPY --chown=atrium:atrium oas_entrypoint.js /app/oas_entrypoint.js
 
