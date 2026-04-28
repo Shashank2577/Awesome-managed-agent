@@ -318,15 +318,10 @@ class ThreadOrchestrator:
                 tid,
                 "EVIDENCE_PUBLISHED",
                 {
-                    "headline": decision.summary or "Analysis Complete",
+                    "headline": decision.headline or decision.summary[:60] or "Analysis Complete",
                     "summary": decision.summary,
-                    "findings": decision.findings,
+                    "sections": decision.sections,
                     "recommendations": decision.recommendations,
-                    "chart": {
-                        "type": "bar",
-                        "title": "Findings by Severity",
-                        "series": _build_severity_chart(decision.findings),
-                    },
                 },
             )
             await self._recorder.emit(tid, "THREAD_COMPLETED", {"thread_id": tid})

@@ -52,6 +52,8 @@ async def test_orchestrator_runs_thread(registry, recorder):
     mock_eval_decision = MagicMock()
     mock_eval_decision.action = "finalize"
     mock_eval_decision.summary = "Done"
+    mock_eval_decision.headline = "Test"
+    mock_eval_decision.sections = []
     mock_eval_decision.findings = []
     mock_eval_decision.recommendations = []
 
@@ -84,6 +86,8 @@ async def test_orchestrator_emits_plan_events(registry, recorder):
     mock_eval_decision = MagicMock()
     mock_eval_decision.action = "finalize"
     mock_eval_decision.summary = "OK"
+    mock_eval_decision.headline = "Test"
+    mock_eval_decision.sections = []
     mock_eval_decision.findings = []
     mock_eval_decision.recommendations = []
 
@@ -217,6 +221,8 @@ async def test_orchestrator_approval_flow(registry, recorder):
     mock_eval_decision = MagicMock()
     mock_eval_decision.action = "finalize"
     mock_eval_decision.summary = "Done"
+    mock_eval_decision.headline = "Test"
+    mock_eval_decision.sections = []
     mock_eval_decision.findings = []
     mock_eval_decision.recommendations = []
 
@@ -330,6 +336,8 @@ async def test_orchestrator_controller_cleaned_up(registry, recorder):
     mock_eval_decision = MagicMock()
     mock_eval_decision.action = "finalize"
     mock_eval_decision.summary = "Done"
+    mock_eval_decision.headline = "Test"
+    mock_eval_decision.sections = []
     mock_eval_decision.findings = []
     mock_eval_decision.recommendations = []
 

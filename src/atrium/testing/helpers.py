@@ -32,7 +32,12 @@ class MockCommander(Commander):
         return Plan(thread_id="", rationale="Mock plan: run all agents", steps=steps)
 
     async def evaluate(self, objective: str, outputs: dict[str, Any]) -> EvalDecision:
-        return EvalDecision(action="finalize", summary="Mock evaluation complete")
+        return EvalDecision(
+            action="finalize",
+            headline="Mock Report",
+            summary="Mock evaluation complete",
+            sections=[{"title": "Results", "content": "All agents completed.", "key_facts": []}],
+        )
 
 
 async def run_thread(

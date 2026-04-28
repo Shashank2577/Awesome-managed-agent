@@ -433,28 +433,49 @@ class ThreadView {
 
   _onEvidence(evt) {
     const p = evt.payload || {};
-    const chart = renderChart(p.chart);
-    const findingsHtml = (p.findings || [])
-      .map(
-        (f) =>
-          `<div class="finding severity-${escape(f.severity || "low")}"><span class="mono">${escape((f.severity || "low").toUpperCase())}</span><span>${escape(f.text || "")}</span></div>`,
-      )
+
+    // Render sections (new intelligent format)
+    const sectionsHtml = (p.sections || [])
+      .map((s) => {
+        const factsHtml = (s.key_facts || [])
+          .map((f) => `<li>${escape(f)}</li>`)
+          .join("");
+        const factsList = factsHtml ? `<ul class="key-facts">${factsHtml}</ul>` : "";
+        const title = s.title ? `<h4 class="section-title">${escape(s.title)}</h4>` : "";
+        const content = s.content ? `<p class="section-content">${escape(s.content)}</p>` : "";
+        return `<div class="evidence-section">${title}${content}${factsList}</div>`;
+      })
       .join("");
+
+    // Render recommendations
     const recsHtml = (p.recommendations || [])
       .map((r) => `<div class="rec">→ ${escape(r)}</div>`)
       .join("");
 
+    // Legacy: render findings if sections are empty (backward compat)
+    let findingsHtml = "";
+    if (!p.sections?.length && p.findings?.length) {
+      findingsHtml = (p.findings || [])
+        .map(
+          (f) =>
+            `<div class="finding severity-${escape(f.severity || "low")}"><span class="mono">${escape((f.severity || "low").toUpperCase())}</span><span>${escape(f.text || "")}</span></div>`,
+        )
+        .join("");
+      findingsHtml = `<div class="findings">${findingsHtml}</div>`;
+    }
+
+    // Legacy: render chart if present
+    const chartHtml = p.chart ? `<div class="chart-host"><div class="chart-title">${escape(p.chart.title || "")}</div>${renderChart(p.chart)}</div>` : "";
+
     const html = `
       <div class="evidence">
-        <span class="pill"><span class="dot"></span> Evidence ready</span>
-        <div class="headline">${escape(p.headline || "Findings")}</div>
+        <span class="pill"><span class="dot"></span> Report ready</span>
+        <div class="headline">${escape(p.headline || "Analysis Complete")}</div>
         <div class="summary">${escape(p.summary || "")}</div>
-        <div class="chart-host">
-          <div class="chart-title">${escape(p.chart?.title || "Chart")}</div>
-          ${chart}
-        </div>
-        <div class="findings">${findingsHtml}</div>
-        <div class="recs">${recsHtml}</div>
+        ${sectionsHtml ? `<div class="evidence-sections">${sectionsHtml}</div>` : ""}
+        ${chartHtml}
+        ${findingsHtml}
+        ${recsHtml ? `<div class="recs">${recsHtml}</div>` : ""}
       </div>
     `;
     this.evidenceEl = this.appendCard(html);

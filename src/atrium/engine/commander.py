@@ -36,31 +36,52 @@ Return ONLY valid JSON in exactly this shape:
 Rules:
 - Only use agent names that appear in the manifest.
 - depends_on must list agent names that must complete before this step runs.
+- CRITICAL: If agent B needs data produced by agent A, agent B MUST list agent A in depends_on.
+  For example, a summarizer that summarizes search results MUST depend on the search agent.
+  Agents without depends_on run in parallel. Agents WITH depends_on wait for their dependencies.
+- Pass relevant inputs from the objective (like the search query) in the inputs field.
 - Do not include any text outside the JSON object.
 """
 
-EVAL_SYSTEM_PROMPT = """You are the Commander evaluating agent outputs.
+EVAL_SYSTEM_PROMPT = """\
+You are synthesizing a final report from agent outputs.
 
 OBJECTIVE: {objective}
 
 AGENT OUTPUTS:
 {outputs}
 
-Decide:
-- "finalize" if the results adequately address the objective
-- "pivot" if results are insufficient and more agents should run
+Your job is to write a clear, intelligent report that directly answers the user's objective.
+Adapt the format to what makes sense for the content:
+- For factual questions: a clear answer paragraph
+- For research: organized sections with key points
+- For analysis: structured findings with context
+- For comparisons: side-by-side key facts
 
 Return JSON:
 {{
-  "decision": "finalize" or "pivot",
-  "summary": "2-3 sentence executive summary",
-  "findings": [
-    {{"severity": "high" or "med" or "low", "text": "description of finding"}}
+  "decision": "finalize",
+  "headline": "A clear, concise title for the report",
+  "summary": "A well-written 2-4 sentence answer that directly addresses the objective. This is the main content the user sees.",
+  "sections": [
+    {{
+      "title": "Section heading",
+      "content": "Paragraph of text with the key information. Write in complete sentences.",
+      "key_facts": ["Key fact 1", "Key fact 2"]
+    }}
   ],
-  "recommendations": ["actionable recommendation"],
-  "rationale": "Why you chose this decision",
-  "new_steps": []
-}}"""
+  "recommendations": ["Optional next step or suggestion"],
+  "rationale": "Why you chose to finalize"
+}}
+
+Rules:
+- The summary should DIRECTLY answer the user's question in plain language.
+- sections should organize the detailed information logically.
+- key_facts within sections are short, scannable bullet points.
+- Do NOT use severity ratings (high/med/low) unless the objective is about risk or incidents.
+- Do NOT include meta-commentary about agents or failures — just present the findings.
+- Write as if you are the expert presenting results, not a system reporting status.
+"""
 
 
 # ---------------------------------------------------------------------------
@@ -81,11 +102,14 @@ def _json_default(obj: Any) -> Any:
 @dataclass
 class EvalDecision:
     action: str  # "finalize" or "pivot"
+    headline: str = ""
     summary: str = ""
     rationale: str = ""
     new_steps: list[PlanStep] = field(default_factory=list)
-    findings: list[dict] = field(default_factory=list)
+    sections: list[dict] = field(default_factory=list)
     recommendations: list[str] = field(default_factory=list)
+    # Legacy compat
+    findings: list[dict] = field(default_factory=list)
 
 
 # ---------------------------------------------------------------------------
@@ -222,28 +246,42 @@ class Commander:
                     )
                 )
 
-        # Sanitize findings: ensure each is a dict
-        raw_findings = raw.get("findings", [])
-        if not isinstance(raw_findings, list):
-            raw_findings = []
-        findings = []
-        for f in raw_findings:
-            if isinstance(f, dict):
-                findings.append(f)
-            elif isinstance(f, str):
-                findings.append({"severity": "low", "text": f})
+        # Parse sections (new format)
+        raw_sections = raw.get("sections", [])
+        if not isinstance(raw_sections, list):
+            raw_sections = []
+        sections = []
+        for s in raw_sections:
+            if isinstance(s, dict):
+                sections.append({
+                    "title": str(s.get("title", "")),
+                    "content": str(s.get("content", "")),
+                    "key_facts": [str(f) for f in s.get("key_facts", []) if f] if isinstance(s.get("key_facts"), list) else [],
+                })
+            elif isinstance(s, str):
+                sections.append({"title": "", "content": s, "key_facts": []})
 
-        # Sanitize recommendations: ensure each is a string
+        # Sanitize recommendations
         raw_recs = raw.get("recommendations", [])
         if not isinstance(raw_recs, list):
             raw_recs = [str(raw_recs)] if raw_recs else []
         recommendations = [str(r) for r in raw_recs]
 
+        # Legacy findings compat (convert sections to findings for old dashboard)
+        findings = []
+        for s in sections:
+            if s.get("content"):
+                findings.append({"severity": "low", "text": s["content"][:200]})
+
+        headline = raw.get("headline", "") or summary[:60]
+
         return EvalDecision(
             action=decision,
+            headline=headline,
             summary=summary,
             rationale=rationale,
             new_steps=new_steps,
-            findings=findings,
+            sections=sections,
             recommendations=recommendations,
+            findings=findings,
         )

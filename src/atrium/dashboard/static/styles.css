@@ -769,6 +769,31 @@ section.block {
 .severity-med  { color: var(--warn); border-color: rgba(255,180,77,0.35); background: rgba(255,180,77,0.06); }
 .severity-low  { color: var(--text-2); }
 
+/* evidence sections (new intelligent format) */
+.evidence-sections { display: flex; flex-direction: column; gap: 16px; margin-top: 16px; }
+.evidence-section {
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: rgba(255,255,255,0.025);
+  border: 1px solid var(--line);
+}
+.section-title {
+  font-size: 14px; font-weight: 700; color: var(--text-1);
+  margin: 0 0 8px; letter-spacing: -0.01em;
+}
+.section-content {
+  font-size: 14px; line-height: 1.65; color: var(--text-2);
+  margin: 0;
+}
+.key-facts {
+  margin: 10px 0 0; padding: 0 0 0 18px;
+  display: flex; flex-direction: column; gap: 4px;
+}
+.key-facts li {
+  font-size: 13px; color: var(--text-2); line-height: 1.5;
+}
+.key-facts li::marker { color: var(--brand-2); }
+
 .recs { display: flex; flex-direction: column; gap: 6px; margin-top: 12px; }
 .rec {
   display: flex; gap: 10px;

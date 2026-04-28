@@ -73,18 +73,23 @@ async def test_evaluate_returns_finalize(registry):
     assert decision.summary == "All good"
 
 
-async def test_evaluate_returns_finalize_with_findings(registry):
+async def test_evaluate_returns_finalize_with_sections(registry):
     commander = Commander(llm_config="openai:gpt-4o-mini", registry=registry)
     eval_result = {
         "decision": "finalize",
+        "headline": "Test Report",
         "summary": "All good",
-        "findings": [{"severity": "low", "text": "Minor issue"}],
+        "sections": [
+            {"title": "Overview", "content": "Everything works", "key_facts": ["Fact 1"]}
+        ],
         "recommendations": ["Monitor closely"],
     }
     with patch.object(commander._llm, "generate_json", new_callable=AsyncMock, return_value=eval_result):
         decision = await commander.evaluate(objective="test", outputs={"searcher": {"results": ["found"]}})
     assert decision.action == "finalize"
-    assert len(decision.findings) == 1
+    assert decision.headline == "Test Report"
+    assert len(decision.sections) == 1
+    assert decision.sections[0]["title"] == "Overview"
     assert len(decision.recommendations) == 1
 
 
