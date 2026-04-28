@@ -4,6 +4,8 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from typing import TYPE_CHECKING, Any
 
+from fastapi import Request
+
 from atrium.core.config import AtriumConfig
 from atrium.core.storage import Storage
 from atrium.core.workspace_store import WorkspaceStore
@@ -81,6 +83,6 @@ class AppState:
         cls._instance = state
 
 
-def get_app_state(request: Any) -> AppState:
+def get_app_state(request: Request) -> AppState:
     """FastAPI dependency that returns the AppState attached to the app."""
     return request.app.state.atrium
