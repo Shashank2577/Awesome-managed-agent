@@ -29,6 +29,12 @@
           <span class="muted mono" id="threadCount">0</span>
         </div>
         <div class="rail-body" id="threadList"></div>
+        <div class="rail-divider"></div>
+        <div class="rail-head">
+          <span class="title">Agents</span>
+          <span class="muted mono" id="agentCount">0</span>
+        </div>
+        <div class="rail-body" id="agentList"></div>
       </aside>
 
       <section class="center-pane">
@@ -83,6 +89,23 @@
         </div>
       </aside>
     </main>
+
+    <!-- Agent Detail Modal -->
+    <div class="modal-overlay" id="agentDetailModal" style="display:none;">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3 id="agentDetailName">Agent</h3>
+          <button class="btn ghost small" onclick="closeAgentDetail()">&times;</button>
+        </div>
+        <div class="modal-body" id="agentDetailBody">
+        </div>
+        <div class="modal-footer">
+          <button class="btn ghost small" onclick="deleteAgent()" style="color:var(--pivot);">Delete</button>
+          <button class="btn ghost small" onclick="editAgent()">Edit</button>
+          <button class="btn ghost small" onclick="closeAgentDetail()">Close</button>
+        </div>
+      </div>
+    </div>
 
     <!-- Agent Builder Modal -->
     <div class="modal-overlay" id="agentModal" style="display:none;">

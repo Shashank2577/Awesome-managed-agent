@@ -63,6 +63,21 @@ async def create_agent(req: CreateAgentRequest) -> dict:
     }
 
 
+@router.get("/agents/{name}/config")
+async def get_agent_config(name: str) -> dict:
+    """Return the full persisted config for a UI-created agent."""
+    from atrium.api.app import get_agent_store
+
+    store = get_agent_store()
+    if store is None:
+        raise HTTPException(500, "Server not fully initialized")
+
+    config = store.load(name)
+    if not config:
+        raise HTTPException(404, f"No config found for agent '{name}'")
+    return config
+
+
 @router.delete("/agents/{name}")
 async def delete_agent(name: str) -> dict:
     """Remove a config-driven agent from persistent storage."""

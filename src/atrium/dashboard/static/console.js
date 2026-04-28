@@ -653,6 +653,171 @@ async function refreshThreads() {
   renderThreadList();
 }
 
+// ---------------------------------------------------------------
+// Agent management
+// ---------------------------------------------------------------
+
+async function refreshAgents() {
+  try {
+    const data = await api("/api/v1/agents");
+    const agents = data.agents || [];
+    const host = $("#agentList");
+    $("#agentCount").textContent = agents.length;
+
+    if (agents.length === 0) {
+      host.innerHTML = `<div class="empty-state">No agents yet. Click <strong>+ Create Agent</strong> to add one.</div>`;
+      return;
+    }
+
+    host.innerHTML = agents.map(a => `
+      <div class="agent-row" data-name="${escape(a.name)}">
+        <div class="agent-row-name">${escape(a.name)}</div>
+        <div class="agent-row-desc">${escape(a.description).slice(0, 60)}</div>
+        <div class="agent-row-caps">${(a.capabilities || []).map(c => `<span class="cap-tag">${escape(c)}</span>`).join("")}</div>
+      </div>
+    `).join("");
+
+    host.querySelectorAll(".agent-row").forEach(row => {
+      row.addEventListener("click", () => showAgentDetail(row.dataset.name));
+    });
+  } catch (e) {
+    /* ignore on first boot */
+  }
+}
+
+let currentAgentDetail = null;
+
+async function showAgentDetail(name) {
+  try {
+    const agent = await api(`/api/v1/agents/${name}`);
+    currentAgentDetail = agent;
+
+    // Try to get the full config (only exists for UI-created agents)
+    let config = null;
+    try {
+      config = await api(`/api/v1/agents/${name}/config`);
+      currentAgentDetail._config = config;
+    } catch (e) {
+      // Agent might be code-defined, no config available
+    }
+
+    $("#agentDetailName").textContent = agent.name;
+
+    let html = `
+      <div class="detail-section">
+        <div class="detail-label">Description</div>
+        <div class="detail-value">${escape(agent.description)}</div>
+      </div>
+      <div class="detail-section">
+        <div class="detail-label">Capabilities</div>
+        <div class="detail-value">${(agent.capabilities || []).map(c => `<span class="cap-tag">${escape(c)}</span>`).join(" ") || "None"}</div>
+      </div>
+    `;
+
+    // Show input/output schema from the registry view
+    if (agent.input_schema) {
+      html += `
+        <div class="detail-section">
+          <div class="detail-label">Input Schema</div>
+          <div class="detail-value mono" style="font-size:12px; background:rgba(0,0,0,0.2); padding:8px 10px; border-radius:var(--radius-s); border:1px solid var(--line); white-space:pre-wrap;">${escape(JSON.stringify(agent.input_schema, null, 2))}</div>
+        </div>
+      `;
+    }
+    if (agent.output_schema) {
+      html += `
+        <div class="detail-section">
+          <div class="detail-label">Output Schema</div>
+          <div class="detail-value mono" style="font-size:12px; background:rgba(0,0,0,0.2); padding:8px 10px; border-radius:var(--radius-s); border:1px solid var(--line); white-space:pre-wrap;">${escape(JSON.stringify(agent.output_schema, null, 2))}</div>
+        </div>
+      `;
+    }
+
+    // Show full config details if available (UI-created HTTPAgent)
+    if (config) {
+      if (config.api_url) {
+        html += `
+          <div class="detail-section">
+            <div class="detail-label">API URL</div>
+            <div class="detail-value mono" style="font-size:13px;">${escape(config.method || "GET")} ${escape(config.api_url)}</div>
+          </div>
+        `;
+      }
+      if (config.headers && Object.keys(config.headers).length) {
+        html += `
+          <div class="detail-section">
+            <div class="detail-label">Headers</div>
+            <div class="detail-value mono" style="font-size:12px; background:rgba(0,0,0,0.2); padding:8px 10px; border-radius:var(--radius-s); border:1px solid var(--line); white-space:pre-wrap;">${escape(Object.entries(config.headers).map(([k, v]) => `${k}: ${v}`).join("\n"))}</div>
+          </div>
+        `;
+      }
+      if (config.query_params && Object.keys(config.query_params).length) {
+        html += `
+          <div class="detail-section">
+            <div class="detail-label">Query Parameters</div>
+            <div class="detail-value mono" style="font-size:12px; background:rgba(0,0,0,0.2); padding:8px 10px; border-radius:var(--radius-s); border:1px solid var(--line); white-space:pre-wrap;">${escape(Object.entries(config.query_params).map(([k, v]) => `${k}=${v}`).join("\n"))}</div>
+          </div>
+        `;
+      }
+      if (config.response_path) {
+        html += `
+          <div class="detail-section">
+            <div class="detail-label">Response Path</div>
+            <div class="detail-value mono" style="font-size:13px;">${escape(config.response_path)}</div>
+          </div>
+        `;
+      }
+    }
+
+    $("#agentDetailBody").innerHTML = html;
+    $("#agentDetailModal").style.display = "flex";
+  } catch (err) {
+    showToast("Failed to load agent: " + err.message, true);
+  }
+}
+
+function closeAgentDetail() {
+  $("#agentDetailModal").style.display = "none";
+  currentAgentDetail = null;
+}
+
+async function deleteAgent() {
+  if (!currentAgentDetail) return;
+  const name = currentAgentDetail.name;
+  if (!confirm(`Delete agent "${name}"? This cannot be undone.`)) return;
+  try {
+    await api(`/api/v1/agents/${name}`, { method: "DELETE" });
+    closeAgentDetail();
+    showToast(`Agent "${name}" deleted`);
+    await refreshAgents();
+  } catch (err) {
+    showToast("Failed to delete: " + err.message, true);
+  }
+}
+
+function editAgent() {
+  if (!currentAgentDetail) return;
+  closeAgentDetail();
+  openAgentModal();
+
+  $("#agentName").value = currentAgentDetail.name;
+  $("#agentDesc").value = currentAgentDetail.description;
+  $("#agentCaps").value = (currentAgentDetail.capabilities || []).join(", ");
+
+  const cfg = currentAgentDetail._config;
+  if (cfg) {
+    $("#agentUrl").value = cfg.api_url || "";
+    $("#agentMethod").value = cfg.method || "GET";
+    $("#agentResponsePath").value = cfg.response_path || "";
+
+    if (cfg.headers && Object.keys(cfg.headers).length) {
+      $("#agentHeaders").value = Object.entries(cfg.headers).map(([k, v]) => `${k}: ${v}`).join("\n");
+    }
+    if (cfg.query_params && Object.keys(cfg.query_params).length) {
+      $("#agentParams").value = Object.entries(cfg.query_params).map(([k, v]) => `${k}=${v}`).join("\n");
+    }
+  }
+}
+
 function clearTranscriptForNewThread() {
   $("#transcript").innerHTML = "";
   $("#eventFeed").innerHTML = "";
@@ -798,13 +963,26 @@ async function createAgent() {
   }
 
   try {
-    await api("/api/v1/agents/create", {
-      method: "POST",
-      body: JSON.stringify({ name, description, capabilities, api_url, method, headers, query_params, response_path }),
-    });
+    try {
+      await api("/api/v1/agents/create", {
+        method: "POST",
+        body: JSON.stringify({ name, description, capabilities, api_url, method, headers, query_params, response_path }),
+      });
+    } catch (err) {
+      if (err.message.includes("already exists") || err.message.includes("400")) {
+        // Delete and recreate (edit mode)
+        await api(`/api/v1/agents/${name}`, { method: "DELETE" });
+        await api("/api/v1/agents/create", {
+          method: "POST",
+          body: JSON.stringify({ name, description, capabilities, api_url, method, headers, query_params, response_path }),
+        });
+      } else {
+        throw err;
+      }
+    }
     closeAgentModal();
-    showToast(`Agent "${name}" created. The Commander can now use it.`);
-    await refreshThreads();
+    showToast(`Agent "${name}" saved. The Commander can now use it.`);
+    await refreshAgents();
   } catch (err) {
     showToast("Failed to create agent: " + err.message, true);
   }
@@ -814,6 +992,10 @@ async function createAgent() {
 window.openAgentModal = openAgentModal;
 window.closeAgentModal = closeAgentModal;
 window.createAgent = createAgent;
+window.showAgentDetail = showAgentDetail;
+window.closeAgentDetail = closeAgentDetail;
+window.deleteAgent = deleteAgent;
+window.editAgent = editAgent;
 
 // ---------------------------------------------------------------
 // Boot
@@ -822,4 +1004,5 @@ window.createAgent = createAgent;
 (async function boot() {
   wireUI();
   try { await refreshThreads(); } catch (e) { /* ignore on first boot */ }
+  try { await refreshAgents(); } catch (e) { /* ignore on first boot */ }
 })();

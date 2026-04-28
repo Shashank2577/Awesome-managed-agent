@@ -946,6 +946,60 @@ section.block {
   border: 1px solid rgba(255,111,122,0.45);
 }
 
+/* =============================================================
+   Agent management panel
+============================================================= */
+
+/* Rail divider */
+.rail-divider {
+  height: 1px;
+  background: var(--line);
+  margin: 0;
+}
+
+/* Agent list items */
+.agent-row {
+  padding: 10px 12px;
+  border-radius: var(--radius-s);
+  border: 1px solid transparent;
+  cursor: pointer;
+  display: flex; flex-direction: column; gap: 4px;
+  transition: background 220ms var(--ease-out), border-color 220ms var(--ease-out);
+}
+.agent-row:hover { background: rgba(255,255,255,0.04); }
+.agent-row-name { font-weight: 600; font-size: 14px; color: var(--text-1); }
+.agent-row-desc { font-size: 12px; color: var(--text-3); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.agent-row-caps { display: flex; gap: 4px; flex-wrap: wrap; }
+
+.cap-tag {
+  font-size: 10px; font-weight: 600;
+  padding: 2px 6px;
+  border-radius: 4px;
+  background: rgba(124,92,255,0.12);
+  color: var(--brand-1);
+  letter-spacing: 0.02em;
+}
+
+/* Agent detail modal */
+.detail-section { margin-bottom: 12px; }
+.detail-label {
+  font-size: 11px; font-weight: 600; color: var(--text-3);
+  letter-spacing: 0.06em; text-transform: uppercase;
+  margin-bottom: 4px;
+}
+.detail-value {
+  font-size: 14px; color: var(--text-1); line-height: 1.5;
+}
+
+/* Empty state */
+.empty-state {
+  padding: 16px 12px;
+  font-size: 13px;
+  color: var(--text-3);
+  text-align: center;
+  line-height: 1.5;
+}
+
 /* respect reduced motion */
 @media (prefers-reduced-motion: reduce) {
   * { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }
