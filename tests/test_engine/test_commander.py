@@ -1,5 +1,5 @@
 import pytest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, patch, MagicMock
 from atrium.core.registry import AgentRegistry
 from atrium.core.agent import Agent
 from atrium.engine.commander import Commander
@@ -33,6 +33,8 @@ def registry():
     return reg
 
 
+# generate_json now returns (dict, usage_dict) — mock accordingly
+
 async def test_plan_returns_valid_structure(registry):
     plan_json = {
         "rationale": "Search first, then write",
@@ -42,8 +44,9 @@ async def test_plan_returns_valid_structure(registry):
         ],
     }
     commander = Commander(llm_config="openai:gpt-4o-mini", registry=registry)
-    with patch.object(commander._llm, "generate_json", new_callable=AsyncMock, return_value=plan_json):
-        plan = await commander.plan("Research AI in healthcare")
+    with patch.object(commander._llm, "generate_json", new_callable=AsyncMock,
+                      return_value=(plan_json, {})):
+        plan, usage = await commander.plan("Research AI in healthcare")
     assert plan.rationale == "Search first, then write"
     assert len(plan.steps) == 2
     assert plan.steps[0].agent == "searcher"
@@ -51,20 +54,24 @@ async def test_plan_returns_valid_structure(registry):
 
 
 async def test_plan_validates_agent_names(registry):
+    """Unknown agent names are filtered out — plan has 0 valid steps."""
     bad_plan = {
         "rationale": "test",
         "steps": [{"agent": "nonexistent", "inputs": {}, "depends_on": []}],
     }
     commander = Commander(llm_config="openai:gpt-4o-mini", registry=registry)
-    with patch.object(commander._llm, "generate_json", new_callable=AsyncMock, return_value=bad_plan):
-        plan = await commander.plan("test")
+    # nonexistent agent → filtered → empty valid_steps → _validate_plan passes (no unknowns)
+    with patch.object(commander._llm, "generate_json", new_callable=AsyncMock,
+                      return_value=(bad_plan, {})):
+        plan, _ = await commander.plan("test")
     assert len(plan.steps) == 0
 
 
 async def test_evaluate_returns_finalize(registry):
     commander = Commander(llm_config="openai:gpt-4o-mini", registry=registry)
     eval_result = {"decision": "finalize", "summary": "All good"}
-    with patch.object(commander._llm, "generate_json", new_callable=AsyncMock, return_value=eval_result):
+    with patch.object(commander._llm, "generate_json", new_callable=AsyncMock,
+                      return_value=(eval_result, {})):
         decision = await commander.evaluate(
             objective="test",
             outputs={"searcher": {"results": ["found"]}},
@@ -84,7 +91,8 @@ async def test_evaluate_returns_finalize_with_sections(registry):
         ],
         "recommendations": ["Monitor closely"],
     }
-    with patch.object(commander._llm, "generate_json", new_callable=AsyncMock, return_value=eval_result):
+    with patch.object(commander._llm, "generate_json", new_callable=AsyncMock,
+                      return_value=(eval_result, {})):
         decision = await commander.evaluate(objective="test", outputs={"searcher": {"results": ["found"]}})
     assert decision.action == "finalize"
     assert decision.headline == "Test Report"
@@ -100,7 +108,8 @@ async def test_evaluate_returns_pivot(registry):
         "rationale": "Need deeper analysis",
         "new_steps": [{"agent": "writer", "inputs": {}, "depends_on": []}],
     }
-    with patch.object(commander._llm, "generate_json", new_callable=AsyncMock, return_value=eval_result):
+    with patch.object(commander._llm, "generate_json", new_callable=AsyncMock,
+                      return_value=(eval_result, {})):
         decision = await commander.evaluate(
             objective="test",
             outputs={"searcher": {"results": ["found"]}},

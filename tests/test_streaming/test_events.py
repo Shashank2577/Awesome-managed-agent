@@ -11,13 +11,13 @@ def recorder():
 
 
 @pytest.fixture
-def sqlite_recorder():
-    """Recorder with SQLite persistence in a temp file."""
-    fd, path = tempfile.mkstemp(suffix=".db")
-    os.close(fd)
-    recorder = EventRecorder(db_path=path)
-    yield recorder
-    os.unlink(path)
+async def sqlite_recorder(tmp_path):
+    """Async recorder with aiosqlite persistence in a temp file."""
+    path = str(tmp_path / "events.db")
+    r = EventRecorder(db_path=path)
+    await r.open()
+    yield r
+    await r.close()
 
 
 async def test_emit_creates_event(recorder):
@@ -65,13 +65,21 @@ async def test_causation_id(recorder):
     assert e2.causation_id == e1.event_id
 
 
-async def test_sqlite_persistence(sqlite_recorder):
-    await sqlite_recorder.emit("t1", "A", {"key": "val"})
-    await sqlite_recorder.emit("t1", "B", {"key": "val2"})
+async def test_sqlite_persistence(tmp_path):
+    """Events survive across recorder instances (simulate server restart)."""
+    path = str(tmp_path / "events.db")
 
-    # Create a NEW recorder pointing at same DB — simulates server restart
-    new_recorder = EventRecorder(db_path=sqlite_recorder._db_path)
-    events = new_recorder.replay("t1")
+    r1 = EventRecorder(db_path=path)
+    await r1.open()
+    await r1.emit("t1", "A", {"key": "val"})
+    await r1.emit("t1", "B", {"key": "val2"})
+    await r1.close()
+
+    r2 = EventRecorder(db_path=path)
+    await r2.open()
+    events = await r2.replay_from_db("t1")
+    await r2.close()
+
     assert len(events) == 2
     assert events[0].type == "A"
     assert events[1].type == "B"
@@ -80,26 +88,43 @@ async def test_sqlite_persistence(sqlite_recorder):
 async def test_sqlite_list_thread_ids(sqlite_recorder):
     await sqlite_recorder.emit("t1", "A", {})
     await sqlite_recorder.emit("t2", "B", {})
+    # In-memory list — both threads were just emitted
     ids = sqlite_recorder.list_thread_ids()
     assert set(ids) == {"t1", "t2"}
 
 
-async def test_sqlite_payload_roundtrip(sqlite_recorder):
-    """Payloads survive JSON serialization through SQLite."""
-    await sqlite_recorder.emit("t1", "A", {"nested": {"x": 1}, "lst": [1, 2, 3]})
+async def test_sqlite_payload_roundtrip(tmp_path):
+    """Payloads survive JSON serialization through aiosqlite."""
+    path = str(tmp_path / "events.db")
 
-    new_recorder = EventRecorder(db_path=sqlite_recorder._db_path)
-    events = new_recorder.replay("t1")
+    r1 = EventRecorder(db_path=path)
+    await r1.open()
+    await r1.emit("t1", "A", {"nested": {"x": 1}, "lst": [1, 2, 3]})
+    await r1.close()
+
+    r2 = EventRecorder(db_path=path)
+    await r2.open()
+    events = await r2.replay_from_db("t1")
+    await r2.close()
+
     assert events[0].payload == {"nested": {"x": 1}, "lst": [1, 2, 3]}
 
 
-async def test_sqlite_causation_id_roundtrip(sqlite_recorder):
+async def test_sqlite_causation_id_roundtrip(tmp_path):
     """causation_id is persisted and restored correctly."""
-    e1 = await sqlite_recorder.emit("t1", "A", {})
-    await sqlite_recorder.emit("t1", "B", {}, causation_id=e1.event_id)
+    path = str(tmp_path / "events.db")
 
-    new_recorder = EventRecorder(db_path=sqlite_recorder._db_path)
-    events = new_recorder.replay("t1")
+    r1 = EventRecorder(db_path=path)
+    await r1.open()
+    e1 = await r1.emit("t1", "A", {})
+    await r1.emit("t1", "B", {}, causation_id=e1.event_id)
+    await r1.close()
+
+    r2 = EventRecorder(db_path=path)
+    await r2.open()
+    events = await r2.replay_from_db("t1")
+    await r2.close()
+
     assert events[1].causation_id == e1.event_id
 
 

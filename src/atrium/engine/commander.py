@@ -4,8 +4,10 @@ from __future__ import annotations
 
 import json
 from dataclasses import dataclass, field
+from decimal import Decimal
 from typing import Any
 
+from atrium.core.errors import ValidationError
 from atrium.core.models import Plan, PlanStep
 from atrium.core.registry import AgentRegistry
 from atrium.engine.llm import LLMClient
@@ -97,6 +99,54 @@ def _json_default(obj: Any) -> Any:
     raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
 
 
+def _validate_plan(steps: list[PlanStep], registry: AgentRegistry) -> None:
+    """Validate a plan against the registry. Raises ValidationError on issues."""
+    # 1. Every agent name exists.
+    available = {cls.name for cls in registry.list_all()}
+    for step in steps:
+        if step.agent not in available:
+            raise ValidationError(
+                f"plan references unknown agent: {step.agent}",
+                {"available": sorted(available)},
+            )
+
+    # 2. No duplicates.
+    seen: set[str] = set()
+    for step in steps:
+        if step.agent in seen:
+            raise ValidationError(
+                f"plan uses agent '{step.agent}' more than once"
+            )
+        seen.add(step.agent)
+
+    # 3. depends_on references real steps and is acyclic.
+    step_names = {s.agent for s in steps}
+    for step in steps:
+        for dep in step.depends_on:
+            if dep not in step_names:
+                raise ValidationError(
+                    f"step '{step.agent}' depends on missing step '{dep}'"
+                )
+
+    # Cycle detection — DFS with white/gray/black colours.
+    WHITE, GRAY, BLACK = 0, 1, 2
+    colour: dict[str, int] = {s.agent: WHITE for s in steps}
+    deps: dict[str, list[str]] = {s.agent: list(s.depends_on) for s in steps}
+
+    def dfs(node: str) -> None:
+        colour[node] = GRAY
+        for d in deps[node]:
+            if colour[d] == GRAY:
+                raise ValidationError(f"plan has a cycle involving '{node}' and '{d}'")
+            if colour[d] == WHITE:
+                dfs(d)
+        colour[node] = BLACK
+
+    for s in steps:
+        if colour[s.agent] == WHITE:
+            dfs(s.agent)
+
+
 # ---------------------------------------------------------------------------
 # EvalDecision dataclass
 # ---------------------------------------------------------------------------
@@ -110,6 +160,8 @@ class EvalDecision:
     new_steps: list[PlanStep] = field(default_factory=list)
     sections: list[dict] = field(default_factory=list)
     recommendations: list[str] = field(default_factory=list)
+    # Token usage from the eval LLM call
+    usage: dict[str, int] = field(default_factory=dict)
     # Legacy compat
     findings: list[dict] = field(default_factory=list)
 
@@ -131,11 +183,14 @@ class Commander:
     # Planning
     # ------------------------------------------------------------------
 
-    async def plan(self, objective: str) -> Plan:
+    async def plan(self, objective: str) -> tuple[Plan, dict[str, int]]:
         """Ask the LLM to create an execution plan for *objective*.
 
-        Agent names in steps are validated against the registry; unknown agents
-        are silently filtered out. Unknown names in depends_on are also removed.
+        Returns:
+            (Plan, usage_dict) — usage_dict has token counts for budget accounting.
+
+        Raises:
+            ValidationError: if the plan references unknown agents, has cycles, etc.
         """
         manifest = self._registry.manifest()
         manifest_json = json.dumps(manifest, indent=2, default=_json_default)
@@ -144,21 +199,21 @@ class Commander:
         user_prompt = f"Objective: {objective}"
 
         try:
-            raw: dict[str, Any] = await self._llm.generate_json(system_prompt, user_prompt)
+            raw, usage = await self._llm.generate_json(system_prompt, user_prompt)
         except Exception:
             # Fallback: only run all agents if registry is small (≤10).
-            # With a large registry, running every agent simultaneously is catastrophic.
             if len(manifest) > 10:
                 raise RuntimeError(
                     f"Planning failed — too many agents ({len(manifest)}) to run without a plan. "
                     "Please check your LLM API key configuration "
                     "(ANTHROPIC_API_KEY, OPENAI_API_KEY, or GEMINI_API_KEY)."
                 )
+            steps = [PlanStep(agent=e["name"], inputs={}, depends_on=[]) for e in manifest]
             return Plan(
                 thread_id="",
                 rationale="LLM planning failed, running all agents.",
-                steps=[PlanStep(agent=e["name"], inputs={}, depends_on=[]) for e in manifest],
-            )
+                steps=steps,
+            ), {}
 
         if not isinstance(raw, dict):
             if len(manifest) > 10:
@@ -168,15 +223,16 @@ class Commander:
                     "Please check your LLM API key configuration "
                     "(ANTHROPIC_API_KEY, OPENAI_API_KEY, or GEMINI_API_KEY)."
                 )
+            steps = [PlanStep(agent=e["name"], inputs={}, depends_on=[]) for e in manifest]
             return Plan(
                 thread_id="",
                 rationale="LLM returned non-dict, running all agents.",
-                steps=[PlanStep(agent=e["name"], inputs={}, depends_on=[]) for e in manifest],
-            )
+                steps=steps,
+            ), {}
 
         known_agents: set[str] = {entry["name"] for entry in manifest}
 
-        # Validate and filter steps (no duplicate agent names)
+        # Build and validate steps
         valid_steps: list[PlanStep] = []
         seen_agents: set[str] = set()
         for step_data in raw.get("steps", []):
@@ -184,9 +240,8 @@ class Commander:
             if agent_name not in known_agents:
                 continue
             if agent_name in seen_agents:
-                continue  # Skip duplicates — each agent can only appear once
+                continue
             seen_agents.add(agent_name)
-            # Filter unknown names from depends_on
             clean_depends = [
                 dep for dep in step_data.get("depends_on", [])
                 if dep in known_agents
@@ -199,11 +254,14 @@ class Commander:
                 )
             )
 
+        # Strict validation — raises ValidationError on any issue
+        _validate_plan(valid_steps, self._registry)
+
         return Plan(
             thread_id="",
             rationale=raw.get("rationale", ""),
             steps=valid_steps,
-        )
+        ), usage
 
     # ------------------------------------------------------------------
     # Evaluation
@@ -212,8 +270,7 @@ class Commander:
     async def evaluate(self, objective: str, outputs: dict[str, Any]) -> EvalDecision:
         """Ask the LLM to evaluate *outputs* and decide to finalize or pivot.
 
-        For pivot decisions, new_steps agent names are validated against the
-        registry.
+        Returns EvalDecision with usage info for budget tracking.
         """
         try:
             outputs_json = json.dumps(outputs, indent=2, default=str)
@@ -224,10 +281,10 @@ class Commander:
             objective=objective,
             outputs=outputs_json,
         )
-        user_prompt = f"Evaluate the outputs and decide: finalize or pivot."
+        user_prompt = "Evaluate the outputs and decide: finalize or pivot."
 
         try:
-            raw: dict[str, Any] = await self._llm.generate_json(system_prompt, user_prompt)
+            raw, usage = await self._llm.generate_json(system_prompt, user_prompt)
         except Exception:
             return EvalDecision(
                 action="finalize",
@@ -266,7 +323,7 @@ class Commander:
                     )
                 )
 
-        # Parse sections (new format)
+        # Parse sections
         raw_sections = raw.get("sections", [])
         if not isinstance(raw_sections, list):
             raw_sections = []
@@ -276,7 +333,8 @@ class Commander:
                 sections.append({
                     "title": str(s.get("title", "")),
                     "content": str(s.get("content", "")),
-                    "key_facts": [str(f) for f in s.get("key_facts", []) if f] if isinstance(s.get("key_facts"), list) else [],
+                    "key_facts": [str(f) for f in s.get("key_facts", []) if f]
+                    if isinstance(s.get("key_facts"), list) else [],
                 })
             elif isinstance(s, str):
                 sections.append({"title": "", "content": s, "key_facts": []})
@@ -287,7 +345,7 @@ class Commander:
             raw_recs = [str(raw_recs)] if raw_recs else []
         recommendations = [str(r) for r in raw_recs]
 
-        # Legacy findings compat (convert sections to findings for old dashboard)
+        # Legacy findings compat
         findings = []
         for s in sections:
             if s.get("content"):
@@ -304,4 +362,5 @@ class Commander:
             sections=sections,
             recommendations=recommendations,
             findings=findings,
+            usage=usage,
         )

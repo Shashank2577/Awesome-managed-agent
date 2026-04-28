@@ -4,6 +4,10 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from decimal import Decimal
 
+# GuardrailViolation is now in core.errors.  Re-export for backward compatibility
+# so anything that does `from atrium.core.guardrails import GuardrailViolation` still works.
+from atrium.core.errors import GuardrailViolation  # noqa: F401
+
 
 @dataclass
 class GuardrailsConfig:
@@ -12,13 +16,6 @@ class GuardrailsConfig:
     max_time_seconds: int = 600
     max_cost_usd: Decimal = field(default_factory=lambda: Decimal("10.0"))
     max_pivots: int = 2
-
-
-class GuardrailViolation(Exception):
-    def __init__(self, code: str, message: str) -> None:
-        self.code = code
-        self.message = message
-        super().__init__(f"{code}: {message}")
 
 
 class GuardrailEnforcer:

@@ -2,14 +2,21 @@
 from __future__ import annotations
 
 import asyncio
+import logging
+import time
+from decimal import Decimal
 from typing import Any
 
+from atrium.core.errors import GuardrailViolation
 from atrium.core.guardrails import GuardrailEnforcer, GuardrailsConfig
-from atrium.core.models import Plan, Thread
+from atrium.core.models import Plan, Thread, ThreadStatus
 from atrium.core.registry import AgentRegistry
 from atrium.engine.commander import Commander
-from atrium.engine.graph_builder import build_graph_from_plan
+from atrium.engine.graph_builder import FailPolicy, build_graph_from_plan
+from atrium.engine.pricing import estimate_cost
 from atrium.streaming.events import EventRecorder
+
+logger = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -73,15 +80,6 @@ class ThreadController:
         return self._human_input or ""
 
 
-# Module-level registry of active controllers, keyed by thread_id.
-_controllers: dict[str, ThreadController] = {}
-
-
-def get_controller(thread_id: str) -> ThreadController | None:
-    """Return the active ThreadController for *thread_id*, or ``None``."""
-    return _controllers.get(thread_id)
-
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
@@ -119,6 +117,13 @@ class ThreadOrchestrator:
         self._guardrails = GuardrailEnforcer(guardrails)
         self._commander = Commander(llm_config=llm_config, registry=registry)
         self._require_approval = require_approval
+        self._llm_config = llm_config
+        # Per-instance controller registry — no more module-level dict
+        self._controllers: dict[str, ThreadController] = {}
+
+    def get_controller(self, thread_id: str) -> ThreadController | None:
+        """Return the active ThreadController for *thread_id*, or None."""
+        return self._controllers.get(thread_id)
 
     async def run(self, objective: str, thread_id: str | None = None) -> dict[str, Any]:
         """Execute a full thread lifecycle and return a summary dict."""
@@ -129,9 +134,12 @@ class ThreadOrchestrator:
 
         # Register a controller for this thread so HITL routes can reach it.
         controller = ThreadController()
-        _controllers[tid] = controller
+        self._controllers[tid] = controller
 
-        # Phase 1: Thread creation (emitted before try so thread_id is always recorded)
+        # Accumulated cost tracking
+        total_cost = Decimal("0")
+
+        # Phase 1: Thread creation
         await self._recorder.emit(tid, "THREAD_CREATED", {"objective": objective, "thread_id": tid})
         await self._recorder.emit(tid, "BUDGET_RESERVED", {
             "currency": "USD",
@@ -139,6 +147,30 @@ class ThreadOrchestrator:
             "consumed": "0.00",
             "hard_limit": str(self._guardrails.config.max_cost_usd),
         })
+
+        # Start wall-clock watchdog
+        started_at = time.monotonic()
+        cancel_event = asyncio.Event()
+
+        async def time_watchdog() -> None:
+            while not cancel_event.is_set():
+                await asyncio.sleep(1.0)
+                elapsed = time.monotonic() - started_at
+                try:
+                    self._guardrails.check_time(elapsed)
+                except GuardrailViolation as exc:
+                    logger.warning(
+                        "Time guardrail exceeded",
+                        extra={"thread_id": tid, "elapsed": elapsed},
+                    )
+                    await self._recorder.emit(
+                        tid, "BUDGET_EXCEEDED",
+                        {"code": exc.code, "message": exc.message},
+                    )
+                    cancel_event.set()
+                    controller.cancel()
+
+        watchdog_task = asyncio.create_task(time_watchdog())
 
         try:
             await self._recorder.emit(tid, "THREAD_PLANNING", {"objective": objective})
@@ -148,14 +180,14 @@ class ThreadOrchestrator:
                 {"text": "Analyzing objective and selecting agents...", "phase": "planning"},
             )
 
-            # Phase 2: Plan
-            plan = await self._commander.plan(objective)
+            # Phase 2: Plan (now returns (Plan, usage))
+            plan, plan_usage = await self._commander.plan(objective)
             plan.thread_id = tid
-            await self._recorder.emit(tid, "BUDGET_CONSUMED", {
-                "currency": "USD",
-                "consumed": "0.10",  # estimated planning cost
-                "hard_limit": str(self._guardrails.config.max_cost_usd),
-            })
+
+            # Emit real token counts for planning phase
+            total_cost = await self._emit_budget_consumed(
+                tid, plan_usage, total_cost,
+            )
 
             await self._recorder.emit(
                 tid,
@@ -191,7 +223,7 @@ class ThreadOrchestrator:
                     },
                 )
 
-            # --- HITL: approval gate (only when require_approval is True) ---
+            # --- HITL: approval gate ---
             if self._require_approval:
                 await self._recorder.emit(tid, "HUMAN_APPROVAL_REQUESTED", {
                     "plan_id": plan.plan_id,
@@ -228,7 +260,13 @@ class ThreadOrchestrator:
             await self._recorder.emit(tid, "PLAN_EXECUTION_STARTED", {"plan_id": plan.plan_id})
             await self._recorder.emit(tid, "THREAD_RUNNING", {"plan_id": plan.plan_id})
 
-            graph = build_graph_from_plan(plan, self._registry, self._recorder)
+            graph = build_graph_from_plan(
+                plan,
+                self._registry,
+                self._recorder,
+                fail_policy=FailPolicy.STOP_THREAD,
+                guardrails=self._guardrails,
+            )
             initial_state = {
                 "inputs": {s.agent: s.inputs for s in plan.steps},
                 "agent_outputs": {},
@@ -246,11 +284,9 @@ class ThreadOrchestrator:
 
             # Phase 4: Evaluate (and pivot loop)
             decision = await self._commander.evaluate(objective, outputs)
-            await self._recorder.emit(tid, "BUDGET_CONSUMED", {
-                "currency": "USD",
-                "consumed": "0.20",  # estimated total
-                "hard_limit": str(self._guardrails.config.max_cost_usd),
-            })
+            total_cost = await self._emit_budget_consumed(
+                tid, decision.usage, total_cost,
+            )
 
             pivot_count = 0
             while decision.action == "pivot" and getattr(decision, "new_steps", None):
@@ -297,7 +333,10 @@ class ThreadOrchestrator:
                         },
                     )
 
-                pivot_graph = build_graph_from_plan(pivot_plan, self._registry, self._recorder)
+                pivot_graph = build_graph_from_plan(
+                    pivot_plan, self._registry, self._recorder,
+                    fail_policy=FailPolicy.STOP_THREAD,
+                )
                 pivot_state = {
                     "inputs": {s.agent: s.inputs for s in pivot_plan.steps},
                     "agent_outputs": dict(outputs),
@@ -311,11 +350,13 @@ class ThreadOrchestrator:
                     {"added_agents": [s.agent for s in decision.new_steps]},
                 )
                 decision = await self._commander.evaluate(objective, outputs)
+                total_cost = await self._emit_budget_consumed(
+                    tid, decision.usage, total_cost,
+                )
 
             # Phase 5: Finalize
             await self._recorder.emit(tid, "PLAN_COMPLETED", {"plan_id": plan.plan_id})
 
-            # Build summary fallback from sections if empty
             summary = decision.summary
             if not summary and decision.sections:
                 summary = decision.sections[0].get("content", "")[:300]
@@ -338,10 +379,74 @@ class ThreadOrchestrator:
         except Exception as exc:
             import traceback
             tb = traceback.format_exc()
+            logger.error(
+                "Thread failed",
+                extra={"thread_id": tid, "error": str(exc)},
+            )
             print(f"[ATRIUM] Thread {tid} failed:\n{tb}", flush=True)
             await self._recorder.emit(tid, "THREAD_FAILED", {"error": str(exc), "thread_id": tid})
             await self._recorder.complete(tid)
             return {"thread_id": tid, "status": "FAILED", "error": str(exc)}
 
         finally:
-            _controllers.pop(tid, None)
+            cancel_event.set()
+            watchdog_task.cancel()
+            try:
+                await watchdog_task
+            except asyncio.CancelledError:
+                pass
+            self._controllers.pop(tid, None)
+
+    # ------------------------------------------------------------------
+    # Private helpers
+    # ------------------------------------------------------------------
+
+    async def _emit_budget_consumed(
+        self,
+        thread_id: str,
+        usage: dict[str, int],
+        running_cost: Decimal,
+    ) -> Decimal:
+        """Emit BUDGET_CONSUMED with real token counts. Returns updated running cost."""
+        if not usage:
+            return running_cost
+
+        input_tokens = usage.get("input_tokens", 0)
+        output_tokens = usage.get("output_tokens", 0)
+        step_cost = estimate_cost(
+            f"{self._commander._llm.model_key()}",
+            input_tokens,
+            output_tokens,
+        )
+        running_cost += step_cost
+
+        # Check cost guardrail
+        self._guardrails.check_cost(running_cost)
+
+        await self._recorder.emit(
+            thread_id,
+            "BUDGET_CONSUMED",
+            {
+                "currency": "USD",
+                "consumed": str(running_cost),
+                "step_cost": str(step_cost),
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "hard_limit": str(self._guardrails.config.max_cost_usd),
+            },
+        )
+        return running_cost
+
+
+# ---------------------------------------------------------------------------
+# Backward-compat: module-level get_controller for any code still importing it
+# ---------------------------------------------------------------------------
+
+def get_controller(thread_id: str) -> ThreadController | None:
+    """Deprecated: use orchestrator.get_controller(). Returns None always.
+
+    The controller dict was moved to ThreadOrchestrator instances in Phase 0.
+    This shim exists so old imports don't crash; route handlers should be
+    updated to call get_orchestrator().get_controller(thread_id) instead.
+    """
+    return None

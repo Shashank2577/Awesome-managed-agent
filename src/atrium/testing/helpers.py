@@ -26,10 +26,11 @@ class MockCommander(Commander):
     def __init__(self, registry: AgentRegistry):
         self._registry = registry
 
-    async def plan(self, objective: str) -> Plan:
+    async def plan(self, objective: str) -> tuple[Plan, dict]:
         agents = self._registry.list_all()
         steps = [PlanStep(agent=a.name, inputs={}, depends_on=[]) for a in agents]
-        return Plan(thread_id="", rationale="Mock plan: run all agents", steps=steps)
+        return Plan(thread_id="", rationale="Mock plan: run all agents", steps=steps), {}
+
 
     async def evaluate(self, objective: str, outputs: dict[str, Any]) -> EvalDecision:
         return EvalDecision(
@@ -37,7 +38,9 @@ class MockCommander(Commander):
             headline="Mock Report",
             summary="Mock evaluation complete",
             sections=[{"title": "Results", "content": "All agents completed.", "key_facts": []}],
+            usage={},
         )
+
 
 
 async def run_thread(

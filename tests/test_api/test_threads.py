@@ -24,8 +24,19 @@ def registry():
 
 
 @pytest.fixture
-def app(registry):
-    return create_app(registry=registry, llm_config="openai:gpt-4o-mini", db_path=":memory:")
+async def app(registry):
+    from httpx import ASGITransport
+    application = create_app(
+        registry=registry,
+        llm_config="openai:gpt-4o-mini",
+        db_path=":memory:",
+        events_db_path=":memory:",
+        threads_db_path=":memory:",
+    )
+    # Trigger lifespan manually by using async with lifespan context
+    async with application.router.lifespan_context(application):
+        yield application
+
 
 
 async def test_create_thread(app):

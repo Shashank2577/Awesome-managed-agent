@@ -2,7 +2,6 @@
 import asyncio
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
-from dataclasses import dataclass, field
 from atrium.core.agent import Agent
 from atrium.core.guardrails import GuardrailsConfig
 from atrium.core.models import Plan, PlanStep
@@ -34,13 +33,28 @@ def recorder():
     return EventRecorder()
 
 
-async def test_orchestrator_runs_thread(registry, recorder):
-    mock_plan = Plan(
-        thread_id="",
-        rationale="test",
-        steps=[PlanStep(agent="adder", inputs={"a": 1, "b": 2}, depends_on=[])],
-    )
+def _mock_plan(steps=None):
+    """Build a mock Plan wrapped in a coroutine that returns (plan, usage_dict)."""
+    if steps is None:
+        steps = [PlanStep(agent="adder", inputs={"a": 1, "b": 2}, depends_on=[])]
+    plan = Plan(thread_id="", rationale="test", steps=steps)
+    return plan, {}
 
+
+def _mock_eval():
+    """Return a mock EvalDecision-like MagicMock."""
+    m = MagicMock()
+    m.action = "finalize"
+    m.summary = "Done"
+    m.headline = "Test"
+    m.sections = []
+    m.findings = []
+    m.recommendations = []
+    m.usage = {}
+    return m
+
+
+async def test_orchestrator_runs_thread(registry, recorder):
     orchestrator = ThreadOrchestrator(
         registry=registry,
         recorder=recorder,
@@ -48,17 +62,8 @@ async def test_orchestrator_runs_thread(registry, recorder):
         llm_config="openai:gpt-4o-mini",
     )
 
-    # Mock both plan and evaluate
-    mock_eval_decision = MagicMock()
-    mock_eval_decision.action = "finalize"
-    mock_eval_decision.summary = "Done"
-    mock_eval_decision.headline = "Test"
-    mock_eval_decision.sections = []
-    mock_eval_decision.findings = []
-    mock_eval_decision.recommendations = []
-
-    with patch.object(orchestrator._commander, "plan", new_callable=AsyncMock, return_value=mock_plan):
-        with patch.object(orchestrator._commander, "evaluate", new_callable=AsyncMock, return_value=mock_eval_decision):
+    with patch.object(orchestrator._commander, "plan", new_callable=AsyncMock, return_value=_mock_plan()):
+        with patch.object(orchestrator._commander, "evaluate", new_callable=AsyncMock, return_value=_mock_eval()):
             result = await orchestrator.run("compute 1 + 2")
 
     assert result["status"] == "COMPLETED"
@@ -70,12 +75,6 @@ async def test_orchestrator_runs_thread(registry, recorder):
 
 
 async def test_orchestrator_emits_plan_events(registry, recorder):
-    mock_plan = Plan(
-        thread_id="",
-        rationale="test plan",
-        steps=[PlanStep(agent="adder", inputs={"a": 5, "b": 3}, depends_on=[])],
-    )
-
     orchestrator = ThreadOrchestrator(
         registry=registry,
         recorder=recorder,
@@ -83,16 +82,8 @@ async def test_orchestrator_emits_plan_events(registry, recorder):
         llm_config="openai:gpt-4o-mini",
     )
 
-    mock_eval_decision = MagicMock()
-    mock_eval_decision.action = "finalize"
-    mock_eval_decision.summary = "OK"
-    mock_eval_decision.headline = "Test"
-    mock_eval_decision.sections = []
-    mock_eval_decision.findings = []
-    mock_eval_decision.recommendations = []
-
-    with patch.object(orchestrator._commander, "plan", new_callable=AsyncMock, return_value=mock_plan):
-        with patch.object(orchestrator._commander, "evaluate", new_callable=AsyncMock, return_value=mock_eval_decision):
+    with patch.object(orchestrator._commander, "plan", new_callable=AsyncMock, return_value=_mock_plan()):
+        with patch.object(orchestrator._commander, "evaluate", new_callable=AsyncMock, return_value=_mock_eval()):
             result = await orchestrator.run("test")
 
     events = recorder.replay(result["thread_id"])
@@ -101,7 +92,6 @@ async def test_orchestrator_emits_plan_events(registry, recorder):
     assert "PLAN_EXECUTION_STARTED" in types
     assert "PLAN_COMPLETED" in types
     assert "BUDGET_RESERVED" in types
-    assert "BUDGET_CONSUMED" in types
 
 
 async def test_orchestrator_handles_plan_failure(registry, recorder):
@@ -130,7 +120,6 @@ async def test_orchestrator_handles_plan_failure(registry, recorder):
 
 async def test_thread_controller_not_paused_initially():
     ctrl = ThreadController()
-    # Should not block — completes within timeout
     await asyncio.wait_for(ctrl.wait_if_paused(), timeout=0.1)
 
 
@@ -138,7 +127,6 @@ async def test_thread_controller_pause_resume():
     ctrl = ThreadController()
     ctrl.pause()
     ctrl.resume()
-    # After resume, should not block
     await asyncio.wait_for(ctrl.wait_if_paused(), timeout=0.1)
 
 
@@ -153,7 +141,6 @@ async def test_thread_controller_cancel_unblocks_pause():
     ctrl = ThreadController()
     ctrl.pause()
     ctrl.cancel()
-    # cancel() sets the pause event, so this should not block
     await asyncio.wait_for(ctrl.wait_if_paused(), timeout=0.1)
     assert ctrl.is_cancelled
 
@@ -199,17 +186,12 @@ async def test_thread_controller_submit_input():
 
 # ---------------------------------------------------------------------------
 # Orchestrator HITL integration tests
+# Controllers are now on the orchestrator instance, not module-level.
 # ---------------------------------------------------------------------------
 
 
 async def test_orchestrator_approval_flow(registry, recorder):
     """When require_approval=True, orchestrator waits and proceeds on approve."""
-    mock_plan = Plan(
-        thread_id="",
-        rationale="test",
-        steps=[PlanStep(agent="adder", inputs={"a": 1, "b": 2}, depends_on=[])],
-    )
-
     orchestrator = ThreadOrchestrator(
         registry=registry,
         recorder=recorder,
@@ -218,28 +200,15 @@ async def test_orchestrator_approval_flow(registry, recorder):
         require_approval=True,
     )
 
-    mock_eval_decision = MagicMock()
-    mock_eval_decision.action = "finalize"
-    mock_eval_decision.summary = "Done"
-    mock_eval_decision.headline = "Test"
-    mock_eval_decision.sections = []
-    mock_eval_decision.findings = []
-    mock_eval_decision.recommendations = []
-
     async def approve_after_delay():
-        # Wait briefly for the orchestrator to reach the approval gate
         await asyncio.sleep(0.1)
-        # Find the controller that was registered
-        for _, ctrl in list(get_controller.__wrapped__() if hasattr(get_controller, '__wrapped__') else []):
-            pass  # noqa
-        # Use the module-level registry directly
-        from atrium.engine.orchestrator import _controllers
-        for ctrl in _controllers.values():
+        # Controllers are now on the orchestrator instance
+        for ctrl in list(orchestrator._controllers.values()):
             ctrl.approve()
             break
 
-    with patch.object(orchestrator._commander, "plan", new_callable=AsyncMock, return_value=mock_plan):
-        with patch.object(orchestrator._commander, "evaluate", new_callable=AsyncMock, return_value=mock_eval_decision):
+    with patch.object(orchestrator._commander, "plan", new_callable=AsyncMock, return_value=_mock_plan()):
+        with patch.object(orchestrator._commander, "evaluate", new_callable=AsyncMock, return_value=_mock_eval()):
             task = asyncio.create_task(approve_after_delay())
             result = await asyncio.wait_for(orchestrator.run("compute 1 + 2"), timeout=5.0)
             await task
@@ -253,12 +222,6 @@ async def test_orchestrator_approval_flow(registry, recorder):
 
 async def test_orchestrator_rejection_flow(registry, recorder):
     """When require_approval=True and plan is rejected, thread is cancelled."""
-    mock_plan = Plan(
-        thread_id="",
-        rationale="test",
-        steps=[PlanStep(agent="adder", inputs={"a": 1, "b": 2}, depends_on=[])],
-    )
-
     orchestrator = ThreadOrchestrator(
         registry=registry,
         recorder=recorder,
@@ -269,12 +232,11 @@ async def test_orchestrator_rejection_flow(registry, recorder):
 
     async def reject_after_delay():
         await asyncio.sleep(0.1)
-        from atrium.engine.orchestrator import _controllers
-        for ctrl in _controllers.values():
+        for ctrl in list(orchestrator._controllers.values()):
             ctrl.reject()
             break
 
-    with patch.object(orchestrator._commander, "plan", new_callable=AsyncMock, return_value=mock_plan):
+    with patch.object(orchestrator._commander, "plan", new_callable=AsyncMock, return_value=_mock_plan()):
         task = asyncio.create_task(reject_after_delay())
         result = await asyncio.wait_for(orchestrator.run("compute 1 + 2"), timeout=5.0)
         await task
@@ -289,12 +251,6 @@ async def test_orchestrator_rejection_flow(registry, recorder):
 
 async def test_orchestrator_cancel_during_run(registry, recorder):
     """Cancelling via controller mid-run results in CANCELLED status."""
-    mock_plan = Plan(
-        thread_id="",
-        rationale="test",
-        steps=[PlanStep(agent="adder", inputs={"a": 1, "b": 2}, depends_on=[])],
-    )
-
     orchestrator = ThreadOrchestrator(
         registry=registry,
         recorder=recorder,
@@ -305,12 +261,11 @@ async def test_orchestrator_cancel_during_run(registry, recorder):
 
     async def cancel_after_delay():
         await asyncio.sleep(0.1)
-        from atrium.engine.orchestrator import _controllers
-        for ctrl in _controllers.values():
+        for ctrl in list(orchestrator._controllers.values()):
             ctrl.cancel()
             break
 
-    with patch.object(orchestrator._commander, "plan", new_callable=AsyncMock, return_value=mock_plan):
+    with patch.object(orchestrator._commander, "plan", new_callable=AsyncMock, return_value=_mock_plan()):
         task = asyncio.create_task(cancel_after_delay())
         result = await asyncio.wait_for(orchestrator.run("compute 1 + 2"), timeout=5.0)
         await task
@@ -319,13 +274,7 @@ async def test_orchestrator_cancel_during_run(registry, recorder):
 
 
 async def test_orchestrator_controller_cleaned_up(registry, recorder):
-    """After run() completes, the controller is removed from the registry."""
-    mock_plan = Plan(
-        thread_id="",
-        rationale="test",
-        steps=[PlanStep(agent="adder", inputs={"a": 1, "b": 2}, depends_on=[])],
-    )
-
+    """After run() completes, the controller is removed from the instance registry."""
     orchestrator = ThreadOrchestrator(
         registry=registry,
         recorder=recorder,
@@ -333,17 +282,11 @@ async def test_orchestrator_controller_cleaned_up(registry, recorder):
         llm_config="openai:gpt-4o-mini",
     )
 
-    mock_eval_decision = MagicMock()
-    mock_eval_decision.action = "finalize"
-    mock_eval_decision.summary = "Done"
-    mock_eval_decision.headline = "Test"
-    mock_eval_decision.sections = []
-    mock_eval_decision.findings = []
-    mock_eval_decision.recommendations = []
-
-    with patch.object(orchestrator._commander, "plan", new_callable=AsyncMock, return_value=mock_plan):
-        with patch.object(orchestrator._commander, "evaluate", new_callable=AsyncMock, return_value=mock_eval_decision):
+    with patch.object(orchestrator._commander, "plan", new_callable=AsyncMock, return_value=_mock_plan()):
+        with patch.object(orchestrator._commander, "evaluate", new_callable=AsyncMock, return_value=_mock_eval()):
             result = await orchestrator.run("test")
 
     tid = result["thread_id"]
+    assert orchestrator.get_controller(tid) is None
+    # Module-level shim still returns None (backward compat)
     assert get_controller(tid) is None

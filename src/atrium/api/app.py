@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import logging
 import os
+from contextlib import asynccontextmanager
 from typing import Optional
 
 from fastapi import FastAPI
@@ -12,10 +13,12 @@ from fastapi.staticfiles import StaticFiles
 from atrium.api.middleware import setup_middleware
 from atrium.api.routes import health, threads, control, registry as registry_router
 from atrium.api.routes import agent_builder
+from atrium.core import logging as atrium_logging
 from atrium.core.agent_store import AgentStore
 from atrium.core.guardrails import GuardrailsConfig
 from atrium.core import agent_factory
 from atrium.core.registry import AgentRegistry
+from atrium.core.thread_store import ThreadStore
 from atrium.engine.orchestrator import ThreadOrchestrator
 from atrium.streaming.events import EventRecorder
 
@@ -27,6 +30,7 @@ _registry: Optional[AgentRegistry] = None
 _recorder: Optional[EventRecorder] = None
 _orchestrator: Optional[ThreadOrchestrator] = None
 _agent_store: Optional[AgentStore] = None
+_thread_store: Optional[ThreadStore] = None
 
 
 def get_registry() -> Optional[AgentRegistry]:
@@ -45,6 +49,10 @@ def get_agent_store() -> Optional[AgentStore]:
     return _agent_store
 
 
+def get_thread_store() -> Optional[ThreadStore]:
+    return _thread_store
+
+
 # ---------------------------------------------------------------------------
 # Factory
 # ---------------------------------------------------------------------------
@@ -54,6 +62,8 @@ def create_app(
     llm_config: Optional[str] = None,
     guardrails: Optional[GuardrailsConfig] = None,
     db_path: str = "atrium_agents.db",
+    events_db_path: str = "atrium_events.db",
+    threads_db_path: str = "atrium_threads.db",
 ) -> FastAPI:
     """Create and configure the Atrium FastAPI application.
 
@@ -61,25 +71,31 @@ def create_app(
         registry: Agent registry to use. Defaults to an empty ``AgentRegistry``.
         llm_config: LLM configuration string (e.g. ``"openai:gpt-4o-mini"``).
         guardrails: Guardrails configuration. Defaults to ``GuardrailsConfig()``.
-        db_path: SQLite database path for persistent agent storage.  Pass
-            ``":memory:"`` in tests to ensure full isolation.
+        db_path: SQLite database path for persistent agent storage.
+        events_db_path: SQLite database path for event records.
+        threads_db_path: SQLite database path for thread records.
 
     Returns:
         Configured ``FastAPI`` application instance.
     """
-    global _registry, _recorder, _orchestrator, _agent_store
+    global _registry, _recorder, _orchestrator, _agent_store, _thread_store
+
+    # Structured JSON logging from startup
+    log_level = os.getenv("ATRIUM_LOG_LEVEL", "INFO")
+    atrium_logging.configure(level=log_level)
+    logger = logging.getLogger(__name__)
 
     from atrium.seeds import iter_seeds  # local import keeps top-level imports lean
 
     _registry = registry or AgentRegistry()
-    _recorder = EventRecorder(db_path="atrium_events.db")
+    _recorder = EventRecorder(db_path=events_db_path if events_db_path != ":memory:" else None)
     _agent_store = AgentStore(db_path=db_path)
+    _thread_store = ThreadStore(db_path=threads_db_path)
 
-    # Populate from the built-in seed corpus on first boot (no-op when the
-    # store already contains agent configs, preserving user customisations).
+    # Populate from the built-in seed corpus on first boot
     seeded = _agent_store.seed_if_empty(iter_seeds())
     if seeded:
-        logging.info("Seeded %d agents from corpus", seeded)
+        logger.info("Seeded agents from corpus", extra={"count": seeded})
 
     # Load previously-saved config-driven agents into the registry
     for saved_config in _agent_store.load_all():
@@ -87,7 +103,8 @@ def create_app(
             agent_cls = agent_factory.build_agent_class(saved_config)
             _registry.register(agent_cls)
         except Exception as exc:
-            logging.warning("Failed to load saved agent config: %s", exc)
+            logger.warning("Failed to load saved agent config: %s", exc)
+
     _guardrails = guardrails or GuardrailsConfig()
 
     if llm_config is not None:
@@ -100,10 +117,23 @@ def create_app(
     else:
         _orchestrator = None
 
+    @asynccontextmanager
+    async def lifespan(app: FastAPI):
+        # Open persistent stores on startup
+        await _recorder.open()
+        await _thread_store.open()
+        logger.info("Atrium started — stores opened")
+        yield
+        # Close on shutdown
+        await _recorder.close()
+        await _thread_store.close()
+        logger.info("Atrium shutdown — stores closed")
+
     app = FastAPI(
         title="Atrium",
         description="Observable, cost-bounded, human-in-the-loop agent orchestration",
         version="0.1.0",
+        lifespan=lifespan,
     )
 
     setup_middleware(app)

@@ -11,7 +11,7 @@
     "format": "json",
     "no_html": "1"
   },
-  "response_path": "Abstract",
+  "response_path": "RelatedTopics.0.Text",
   "capabilities": [
     "search",
     "duckduckgo",

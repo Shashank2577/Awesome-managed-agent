@@ -23,33 +23,38 @@ def test_parse_llm_config_anthropic():
 
 @pytest.mark.asyncio
 async def test_generate_json_returns_parsed_dict():
+    """generate_json now returns (dict, usage_dict)."""
     client = LLMClient("openai:gpt-4o-mini")
 
     mock_response = MagicMock()
     mock_response.content = '{"plan": "test"}'
+    mock_response.usage_metadata = None  # no usage
 
     with patch.object(client, "_get_chat_model") as mock_model:
         mock_instance = AsyncMock()
         mock_instance.ainvoke.return_value = mock_response
         mock_model.return_value = mock_instance
 
-        result = await client.generate_json("system prompt", "user prompt")
+        result, usage = await client.generate_json("system prompt", "user prompt")
         assert result == {"plan": "test"}
+        assert isinstance(usage, dict)
 
 
 @pytest.mark.asyncio
 async def test_generate_json_handles_markdown_fence():
+    """generate_json strips ```json fences before parsing."""
     client = LLMClient("openai:gpt-4o-mini")
 
     mock_response = MagicMock()
     mock_response.content = '```json\n{"plan": "test"}\n```'
+    mock_response.usage_metadata = None
 
     with patch.object(client, "_get_chat_model") as mock_model:
         mock_instance = AsyncMock()
         mock_instance.ainvoke.return_value = mock_response
         mock_model.return_value = mock_instance
 
-        result = await client.generate_json("system prompt", "user prompt")
+        result, _ = await client.generate_json("system prompt", "user prompt")
         assert result == {"plan": "test"}
 
 
@@ -84,21 +89,24 @@ async def test_generate_text_does_not_parse_json():
         mock_model.return_value = mock_instance
 
         result = await client.generate_text("system prompt", "user prompt")
-        # Should be the raw string, not a parsed dict
         assert isinstance(result, str)
         assert result == '{"key": "value"}'
 
 
 @pytest.mark.asyncio
 async def test_generate_json_calls_generate_text_internally():
-    """generate_json delegates to generate_text and then parses the result."""
+    """generate_json uses the chat model directly (no longer delegates to generate_text)."""
     client = LLMClient("openai:gpt-4o-mini")
 
-    with patch.object(
-        client, "generate_text", new_callable=AsyncMock
-    ) as mock_generate_text:
-        mock_generate_text.return_value = '{"answer": 42}'
-        result = await client.generate_json("sys", "user")
+    mock_response = MagicMock()
+    mock_response.content = '{"answer": 42}'
+    mock_response.usage_metadata = None
 
-    mock_generate_text.assert_awaited_once_with("sys", "user")
+    with patch.object(client, "_get_chat_model") as mock_model:
+        mock_instance = AsyncMock()
+        mock_instance.ainvoke.return_value = mock_response
+        mock_model.return_value = mock_instance
+
+        result, _ = await client.generate_json("sys", "user")
+
     assert result == {"answer": 42}

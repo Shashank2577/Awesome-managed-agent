@@ -4,23 +4,34 @@ from __future__ import annotations
 from fastapi import APIRouter, HTTPException
 
 from atrium.api.schemas import ActionResponse, HumanInputRequest
-from atrium.engine.orchestrator import get_controller
 
 router = APIRouter()
 
 
-def _require_thread(thread_id: str) -> None:
-    from atrium.api.routes.threads import _threads
+def _get_controller(thread_id: str):
+    """Get the ThreadController from the orchestrator instance."""
+    from atrium.api.app import get_orchestrator
+    orchestrator = get_orchestrator()
+    if orchestrator is None:
+        return None
+    return orchestrator.get_controller(thread_id)
 
-    if thread_id not in _threads:
+
+async def _require_thread(thread_id: str) -> None:
+    from atrium.api.app import get_thread_store
+    thread_store = get_thread_store()
+    if thread_store is None:
+        raise HTTPException(status_code=503, detail="Thread store not available")
+    thread = await thread_store.get(thread_id)
+    if thread is None:
         raise HTTPException(status_code=404, detail="Thread not found")
 
 
 @router.post("/threads/{thread_id}/pause", response_model=ActionResponse)
 async def pause_thread(thread_id: str) -> ActionResponse:
     """Pause a running thread."""
-    _require_thread(thread_id)
-    controller = get_controller(thread_id)
+    await _require_thread(thread_id)
+    controller = _get_controller(thread_id)
     if controller:
         controller.pause()
         from atrium.api.app import get_recorder
@@ -33,8 +44,8 @@ async def pause_thread(thread_id: str) -> ActionResponse:
 @router.post("/threads/{thread_id}/resume", response_model=ActionResponse)
 async def resume_thread(thread_id: str) -> ActionResponse:
     """Resume a paused thread."""
-    _require_thread(thread_id)
-    controller = get_controller(thread_id)
+    await _require_thread(thread_id)
+    controller = _get_controller(thread_id)
     if controller:
         controller.resume()
         from atrium.api.app import get_recorder
@@ -47,8 +58,8 @@ async def resume_thread(thread_id: str) -> ActionResponse:
 @router.post("/threads/{thread_id}/cancel", response_model=ActionResponse)
 async def cancel_thread(thread_id: str) -> ActionResponse:
     """Cancel a running or paused thread."""
-    _require_thread(thread_id)
-    controller = get_controller(thread_id)
+    await _require_thread(thread_id)
+    controller = _get_controller(thread_id)
     if controller:
         controller.cancel()
     return ActionResponse(thread_id=thread_id, accepted=controller is not None)
@@ -57,8 +68,8 @@ async def cancel_thread(thread_id: str) -> ActionResponse:
 @router.post("/threads/{thread_id}/approve", response_model=ActionResponse)
 async def approve_thread(thread_id: str) -> ActionResponse:
     """Approve a pending HITL checkpoint."""
-    _require_thread(thread_id)
-    controller = get_controller(thread_id)
+    await _require_thread(thread_id)
+    controller = _get_controller(thread_id)
     if controller:
         controller.approve()
     return ActionResponse(thread_id=thread_id, accepted=controller is not None)
@@ -67,8 +78,8 @@ async def approve_thread(thread_id: str) -> ActionResponse:
 @router.post("/threads/{thread_id}/reject", response_model=ActionResponse)
 async def reject_thread(thread_id: str) -> ActionResponse:
     """Reject a pending HITL checkpoint."""
-    _require_thread(thread_id)
-    controller = get_controller(thread_id)
+    await _require_thread(thread_id)
+    controller = _get_controller(thread_id)
     if controller:
         controller.reject()
     return ActionResponse(thread_id=thread_id, accepted=controller is not None)
@@ -77,8 +88,8 @@ async def reject_thread(thread_id: str) -> ActionResponse:
 @router.post("/threads/{thread_id}/input", response_model=ActionResponse)
 async def human_input(thread_id: str, body: HumanInputRequest) -> ActionResponse:
     """Accept human input for a waiting thread."""
-    _require_thread(thread_id)
-    controller = get_controller(thread_id)
+    await _require_thread(thread_id)
+    controller = _get_controller(thread_id)
     if controller:
         controller.submit_input(body.input)
     return ActionResponse(thread_id=thread_id, accepted=controller is not None)

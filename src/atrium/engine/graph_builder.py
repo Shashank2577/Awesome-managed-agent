@@ -1,6 +1,7 @@
 """Converts a Commander Plan into a LangGraph StateGraph."""
 from __future__ import annotations
 
+from enum import Enum
 from typing import Annotated, Any, Optional, TypedDict
 
 from langgraph.checkpoint.sqlite import SqliteSaver
@@ -13,7 +14,14 @@ from atrium.engine.callbacks import (
     emit_agent_failed,
     emit_agent_running,
 )
+from atrium.engine.retry_utils import async_retry_agent
 from atrium.streaming.events import EventRecorder
+
+
+class FailPolicy(str, Enum):
+    STOP_THREAD = "stop_thread"   # raise; the orchestrator marks thread FAILED
+    CONTINUE = "continue"         # current behaviour: return {"error": ...}
+    RETRY_STEP = "retry_step"     # retry up to max_attempts, then stop_thread
 
 
 def _merge_dicts(a: dict, b: dict) -> dict:
@@ -33,6 +41,9 @@ def build_agent_node(
     registry: AgentRegistry,
     recorder: EventRecorder,
     thread_id: str,
+    guardrails=None,
+    fail_policy: FailPolicy = FailPolicy.STOP_THREAD,
+    max_attempts: int = 3,
 ):
     """Create a LangGraph node function that runs an Atrium agent."""
 
@@ -53,11 +64,19 @@ def build_agent_node(
 
         await emit_agent_running(recorder, thread_id, agent_name)
 
+        async def run_once() -> dict:
+            return await agent.run(agent_input)
+
         try:
-            output = await agent.run(agent_input)
+            if fail_policy == FailPolicy.RETRY_STEP:
+                output = await async_retry_agent(run_once, max_attempts=max_attempts)
+            else:
+                output = await run_once()
             await emit_agent_completed(recorder, thread_id, agent_name, output)
         except Exception as exc:
             await emit_agent_failed(recorder, thread_id, agent_name, str(exc))
+            if fail_policy == FailPolicy.STOP_THREAD:
+                raise   # caller (orchestrator) will catch and mark thread FAILED
             output = {"error": str(exc)}
 
         new_outputs = dict(state.get("agent_outputs", {}))
@@ -72,13 +91,22 @@ def build_graph_from_plan(
     registry: AgentRegistry,
     recorder: EventRecorder,
     checkpointer_db: Optional[str] = None,
+    fail_policy: FailPolicy = FailPolicy.STOP_THREAD,
+    guardrails=None,
 ):
     """Compile a Plan into a LangGraph StateGraph."""
     graph: StateGraph = StateGraph(ThreadState)
 
     # Register a node for every step
     for step in plan.steps:
-        node_fn = build_agent_node(step.agent, registry, recorder, plan.thread_id)
+        node_fn = build_agent_node(
+            step.agent,
+            registry,
+            recorder,
+            plan.thread_id,
+            guardrails=guardrails,
+            fail_policy=fail_policy,
+        )
         graph.add_node(step.agent, node_fn)
 
     # Wire edges: roots connect from START
