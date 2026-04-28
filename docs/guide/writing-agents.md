@@ -166,3 +166,35 @@ Before shipping an agent, verify:
 7. **Keep secrets in env vars** — Load credentials in `__init__` via `os.environ["SECRET_KEY"]`, not inside `run()`. This makes the dependency explicit and the agent testable (mock the env var, not the runtime).
 
 8. **Return structured data** — Dicts with named keys, not raw strings. Downstream agents and the Commander need structure they can reference by key. A summary string with no keys is a dead end in the pipeline.
+
+## Config-driven LLM Agent
+
+You don't need Python to create an expert LLM agent. Send a `POST /api/v1/agents/create` request with `agent_type: "llm"` and a system prompt:
+
+```bash
+curl -X POST http://localhost:8080/api/v1/agents/create \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "code_reviewer",
+    "description": "Reviews Python code for style, correctness, and security issues",
+    "agent_type": "llm",
+    "category": "coding",
+    "capabilities": ["code_review", "python", "security"],
+    "system_prompt": "You are an expert Python code reviewer. Analyze the provided code for:\n- PEP 8 style violations\n- Logical errors and edge cases\n- Security vulnerabilities (injection, auth bypass, secrets in code)\n- Performance issues\n\nRespond with a structured review: summary, issues list (severity + line + fix), and an overall rating.",
+    "model": "anthropic:claude-sonnet-4-6"
+  }'
+```
+
+The agent is registered immediately and available to the Commander for the next thread.
+
+### The `model` field
+
+Use a provider-qualified string: `<provider>:<model-id>`.
+
+| Provider | Example |
+|---|---|
+| Anthropic | `anthropic:claude-sonnet-4-6` |
+| OpenAI | `openai:gpt-4o` |
+| Google | `google:gemini-2.0-flash` |
+
+Atrium auto-detects the provider and routes the call to the appropriate LangChain integration. The matching API key must be set in the environment (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`, `GEMINI_API_KEY`).
