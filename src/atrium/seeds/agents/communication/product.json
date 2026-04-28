@@ -1,0 +1,11 @@
+{
+  "name": "seed/product",
+  "description": "Product Vision",
+  "agent_type": "llm",
+  "category": "communication",
+  "system_prompt": "# Product Vision\n\n## Product Overview\n\n**Name:** {{PRODUCT_NAME}}\n\n**Tagline:** {{ONE_LINE_DESCRIPTION}}\n\n**Description:**\n{{DETAILED_DESCRIPTION}}\n\n## Problem Statement\n\n### The Problem\n\n{{PROBLEM_DESCRIPTION}}\n\n### Current Solutions\n\n{{EXISTING_SOLUTIONS}}\n\n### Why They Fall Short\n\n{{SOLUTION_GAPS}}\n\n## Target Users\n\n### Primary Users\n\n{{PRIMARY_USER_PERSONA}}\n\n- **Who:** {{USER_DESCRIPTION}}\n- **Goals:** {{USER_GOALS}}\n- **Pain Points:** {{USER_PAIN_POINTS}}\n- **Technical Proficiency:** {{TECHNICAL_LEVEL}}\n\n### Secondary Users\n\n{{SECONDARY_USER_PERSONA}}\n\n- **Who:** {{USER_DESCRIPTION}}\n- **Goals:** {{USER_GOALS}}\n- **Relationship to Primary:** {{RELATIONSHIP}}\n\n## Core Value Proposition\n\n### Key Benefits\n\n1. {{BENEFIT_1}}\n2. {{BENEFIT_2}}\n3. {{BENEFIT_3}}\n\n### Differentiators\n\n- {{DIFFERENTIATOR_1}}\n- {{DIFFERENTIATOR_2}}\n\n### Value Statement\n\n> {{VALUE_STATEMENT}}\n\n## Success Metrics\n\n### Key Performance Indicators\n\n| Metric       | Target       | Measurement Method |\n| ------------ | ------------ | ------------------ |\n| {{METRIC_1}} | {{TARGET_1}} | {{METHOD_1}}       |\n| {{METRIC_2}} | {{TARGET_2}} | {{METHOD_2}}       |\n| {{METRIC_3}} | {{TARGET_3}} | {{METHOD_3}}       |\n\n### North Star Metric\n\n{{NORTH_STAR_METRIC}}\n\n### Leading Indicators\n\n- {{LEADING_INDICATOR_1}}\n- {{LEADING_INDICATOR_2}}\n\n### Lagging Indicators\n\n- {{LAGGING_INDICATOR_1}}\n- {{LAGGING_INDICATOR_2}}\n\n## Out of Scope\n\n### Explicitly Not Included\n\n- {{OUT_OF_SCOPE_1}}\n- {{OUT_OF_SCOPE_2}}\n- {{OUT_OF_SCOPE_3}}\n\n### Future Considerations\n\n- {{FUTURE_CONSIDERATION_1}}\n- {{FUTURE_CONSIDERATION_2}}\n\n### Non-Goals\n\n- {{NON_GOAL_1}}\n- {{NON_GOAL_2}}\n",
+  "model": "anthropic:claude-sonnet-4-6",
+  "capabilities": [],
+  "seeded": true,
+  "seed_version": 1
+}
