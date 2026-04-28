@@ -1,7 +1,7 @@
 """API key authentication for FastAPI dependencies."""
 from __future__ import annotations
 
-from fastapi import Depends, Header, HTTPException, Request
+from fastapi import Depends, Header, HTTPException, Query, Request
 
 from atrium.api.state import AppState, get_app_state
 from atrium.core.auth import ApiKey, ApiKeyKind, Workspace
@@ -11,11 +11,17 @@ async def require_api_key(
     request: Request,
     state: AppState = Depends(get_app_state),
     x_atrium_key: str | None = Header(default=None, alias="X-Atrium-Key"),
+    token: str | None = Query(default=None),
 ) -> ApiKey:
-    """Resolve an ApiKey from X-Atrium-Key. 401 if missing or invalid."""
-    if not x_atrium_key:
+    """Resolve an ApiKey from X-Atrium-Key header or ?token= query param.
+
+    The query param exists solely for EventSource (browser SSE) which cannot
+    send custom headers.  Never use it for non-streaming endpoints.
+    """
+    secret = x_atrium_key or token
+    if not secret:
         raise HTTPException(401, detail="missing X-Atrium-Key header")
-    key = await state.workspace_store.lookup_by_secret(x_atrium_key)
+    key = await state.workspace_store.lookup_by_secret(secret)
     if key is None or key.revoked_at is not None:
         raise HTTPException(401, detail="invalid api key")
     request.state.api_key = key

@@ -4,10 +4,11 @@ from __future__ import annotations
 import logging
 import os
 from contextlib import asynccontextmanager
+from pathlib import Path
 from typing import Optional
 
-from fastapi import FastAPI
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse, JSONResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 
 from atrium.api.middleware import setup_middleware
@@ -54,6 +55,30 @@ def get_agent_store() -> Optional[AgentStore]:
 
 def get_thread_store() -> Optional[ThreadStore]:
     return _thread_store
+
+
+_DEV_KEY_FILE = Path("atrium_dev_key.txt")
+
+
+async def _bootstrap_dev_workspace(app_state: "AppState", logger: logging.Logger) -> Optional[str]:
+    """Create a default workspace + API key if none exist. Returns plaintext key."""
+    if _DEV_KEY_FILE.exists():
+        return _DEV_KEY_FILE.read_text().strip()
+
+    from atrium.core.auth import ApiKeyKind
+
+    try:
+        ws = await app_state.workspace_store.create_workspace("Development")
+        _, secret = await app_state.workspace_store.issue_key(
+            workspace_id=ws.workspace_id,
+            kind=ApiKeyKind.WORKSPACE,
+            name="dev-auto",
+        )
+        _DEV_KEY_FILE.write_text(secret)
+        return secret
+    except Exception as exc:
+        logger.warning("Dev workspace bootstrap failed: %s", exc)
+        return None
 
 
 # ---------------------------------------------------------------------------
@@ -125,11 +150,24 @@ def create_app(
         # Open persistent stores on startup
         await _recorder.open()
         await _thread_store.open()
+        await app_state.workspace_store.open()
         await app_state.mcp_server_store.open()
         await app_state.session_store.open()
+
+        # Dev-mode bootstrap: auto-create workspace + API key on first boot
+        dev_key: Optional[str] = None
+        if os.getenv("ATRIUM_DEV_MODE"):
+            dev_key = await _bootstrap_dev_workspace(app_state, logger)
+            if dev_key:
+                logger.info(
+                    "ATRIUM DEV MODE — API key: %s  (also in atrium_dev_key.txt)",
+                    dev_key,
+                )
+
         logger.info("Atrium started — stores opened")
         yield
         # Close on shutdown
+        await app_state.workspace_store.close()
         await app_state.shutdown()
         logger.info("Atrium shutdown — stores closed")
 
@@ -147,11 +185,10 @@ def create_app(
     from atrium.core.mcp_server_store import MCPServerStore
     from atrium.harness.session import SessionStore
 
-    # We mock or create missing stores for the state object
     app_state = AppState(
         config=get_config(),
         storage=SQLiteStorage("atrium.db"),
-        workspace_store=WorkspaceStore("atrium.db"),
+        workspace_store=WorkspaceStore("atrium.db"),  # accepts str path directly
         thread_store=_thread_store,
         agent_store=_agent_store,
         recorder=_recorder,
@@ -189,6 +226,15 @@ def create_app(
         @app.get("/dashboard", include_in_schema=False)
         async def serve_dashboard():
             return FileResponse(os.path.join(dashboard_dir, "console.html"))
+
+    @app.get("/api/v1/setup", include_in_schema=False)
+    async def dev_setup():
+        """Dev-mode only: return the bootstrap API key so the UI can self-configure."""
+        if not os.getenv("ATRIUM_DEV_MODE"):
+            raise HTTPException(404)
+        if not _DEV_KEY_FILE.exists():
+            raise HTTPException(503, detail="Dev setup not complete — server still starting")
+        return JSONResponse({"api_key": _DEV_KEY_FILE.read_text().strip(), "dev": True})
 
     @app.get("/", include_in_schema=False)
     async def root_redirect():

@@ -15,12 +15,14 @@ from __future__ import annotations
 import asyncio
 import json
 from typing import Optional
+from uuid import uuid4
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
 from atrium.harness.session import SessionStatus, Session
+from atrium.streaming.bus import format_sse, format_sse_end
 
 try:
     from atrium.api.auth import require_workspace
@@ -267,10 +269,77 @@ async def create_session(
         },
     )
 
-    # Note: In a full production implementation, we would dispatch the sandbox
-    # startup here (Phase 2/6 functionality).
+    # For the echo runtime, simulate a complete execution so the UI is demonstrable
+    # without needing the Docker sandbox orchestrator running.
+    if req.runtime == "echo":
+        asyncio.create_task(
+            _run_echo_simulation(session.session_id, workspace.workspace_id, req.objective, state)
+        )
 
     return _sess_response(session)
+
+
+async def _run_echo_simulation(
+    session_id: str, workspace_id: str, objective: str, state: "AppState"
+) -> None:
+    """Emit a realistic event sequence for the echo runtime — no Docker required."""
+    rec = state.recorder
+    sess_store = state.session_store
+
+    async def emit(t: str, p: dict) -> None:
+        await rec.emit(session_id, t, p)
+
+    try:
+        await asyncio.sleep(0.4)
+        await emit("THREAD_PLANNING_STARTED", {})
+        await asyncio.sleep(0.7)
+        plan_id = str(uuid4())
+        await emit("PLAN_CREATED", {
+            "plan_id": plan_id,
+            "plan_number": 1,
+            "rationale": f"I'll process: {objective[:120]}",
+            "graph": {"nodes": [
+                {"key": "executor", "role": "executor",
+                 "objective": objective[:80], "depends_on": []}
+            ]},
+        })
+        await asyncio.sleep(0.3)
+        await emit("THREAD_RUNNING", {})
+        await emit("AGENT_HIRED", {
+            "agent_key": "executor", "role": "echo-executor",
+            "objective": objective[:80], "depends_on": [],
+        })
+        await asyncio.sleep(0.8)
+        await emit("AGENT_RUNNING", {"agent_key": "executor"})
+        await emit("AGENT_MESSAGE", {
+            "agent_key": "executor",
+            "text": f"[echo] Processing: {objective[:120]}",
+        })
+        await asyncio.sleep(1.2)
+        await emit("AGENT_OUTPUT", {
+            "agent_key": "executor",
+            "output": {"result": "echo OK", "objective": objective},
+        })
+        await emit("AGENT_COMPLETED", {"agent_key": "executor"})
+        await asyncio.sleep(0.3)
+        await emit("EVIDENCE_PUBLISHED", {
+            "headline": "Echo Session Complete",
+            "summary": f"Processed: {objective[:200]}",
+            "sections": [{
+                "title": "Result",
+                "content": "The echo runtime acknowledged your request successfully.",
+                "key_facts": [
+                    "Session created and streamed in real time",
+                    "Echo runtime requires no API key or Docker sandbox",
+                    "Switch to direct_anthropic or open_agent_sdk for real execution",
+                ],
+            }],
+        })
+        await emit("THREAD_COMPLETED", {})
+        if sess_store:
+            await sess_store.set_status(workspace_id, session_id, SessionStatus.COMPLETED)
+    except Exception:
+        pass
 
 
 # ---------------------------------------------------------------------------
@@ -295,19 +364,29 @@ async def stream_session(
         raise HTTPException(404, "Session not found")
 
     async def event_generator():
-        queue = asyncio.Queue()
+        queue: asyncio.Queue = asyncio.Queue()
+        # Subscribe before replay to avoid missing events emitted between the two
         await state.recorder.subscribe(session_id, queue)
+        replayed_seq = 0
         try:
+            # Replay history so clients catch up immediately on reconnect
+            for evt in state.recorder.replay(session_id):
+                yield format_sse(evt)
+                replayed_seq = evt.sequence
+
             while True:
                 if await request.is_disconnected():
                     break
                 try:
                     event = await asyncio.wait_for(queue.get(), timeout=_SSE_HEARTBEAT)
-                    yield f"data: {json.dumps(event.payload)}\n\n"
+                    # Skip events already sent via replay
+                    if event.sequence > replayed_seq:
+                        yield format_sse(event)
                 except asyncio.TimeoutError:
                     yield ": heartbeat\n\n"
         finally:
             await state.recorder.unsubscribe(session_id, queue)
+        yield format_sse_end()
 
     return StreamingResponse(
         event_generator(),

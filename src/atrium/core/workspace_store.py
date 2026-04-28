@@ -54,8 +54,25 @@ def _parse_dt(s: str | None) -> datetime | None:
 class WorkspaceStore:
     """Workspaces and API keys."""
 
-    def __init__(self, storage: Storage) -> None:
-        self._storage = storage
+    def __init__(self, db_path_or_storage: "str | Storage") -> None:
+        if isinstance(db_path_or_storage, str):
+            from atrium.core.storage.sqlite import SQLiteStorage
+            self._storage: Storage = SQLiteStorage(db_path_or_storage)
+            self._owns_storage = True
+        else:
+            self._storage = db_path_or_storage
+            self._owns_storage = False
+
+    async def open(self) -> None:
+        """Initialize storage and apply schema. Call once at startup."""
+        if self._owns_storage:
+            await self._storage.init()  # type: ignore[attr-defined]
+        await self.init_schema()
+
+    async def close(self) -> None:
+        """Close the underlying storage connection."""
+        if self._owns_storage:
+            await self._storage.close()  # type: ignore[attr-defined]
 
     async def init_schema(self) -> None:
         for stmt in _SCHEMA_SQL.strip().split(";"):
