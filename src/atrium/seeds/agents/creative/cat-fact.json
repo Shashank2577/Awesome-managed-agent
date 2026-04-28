@@ -1,0 +1,16 @@
+{
+  "name": "seed/cat-fact",
+  "description": "Retrieve random interesting cat facts from the Cat Fact Ninja API.",
+  "agent_type": "http",
+  "category": "creative",
+  "api_url": "https://catfact.ninja/facts",
+  "method": "GET",
+  "headers": {},
+  "query_params": {
+    "limit": "5"
+  },
+  "response_path": "data",
+  "capabilities": ["cats", "facts", "animals", "trivia", "fun"],
+  "seeded": true,
+  "seed_version": 1
+}

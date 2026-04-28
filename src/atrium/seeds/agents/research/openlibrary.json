@@ -1,0 +1,17 @@
+{
+  "name": "seed/openlibrary",
+  "description": "Search Open Library for books by title, author, or subject.",
+  "agent_type": "http",
+  "category": "research",
+  "api_url": "https://openlibrary.org/search.json",
+  "method": "GET",
+  "headers": {},
+  "query_params": {
+    "q": "{query}",
+    "limit": "10"
+  },
+  "response_path": "docs",
+  "capabilities": ["books", "library", "open-library", "search"],
+  "seeded": true,
+  "seed_version": 1
+}

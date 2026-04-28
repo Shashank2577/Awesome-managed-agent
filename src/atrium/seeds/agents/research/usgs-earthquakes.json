@@ -1,0 +1,18 @@
+{
+  "name": "seed/usgs-earthquakes",
+  "description": "Retrieve recent earthquake events from the USGS Earthquake Hazards API.",
+  "agent_type": "http",
+  "category": "research",
+  "api_url": "https://earthquake.usgs.gov/fdsnws/event/1/query",
+  "method": "GET",
+  "headers": {},
+  "query_params": {
+    "format": "geojson",
+    "q": "{query}",
+    "limit": "10"
+  },
+  "response_path": "features",
+  "capabilities": ["earthquake", "usgs", "seismic", "geology", "natural-disasters"],
+  "seeded": true,
+  "seed_version": 1
+}

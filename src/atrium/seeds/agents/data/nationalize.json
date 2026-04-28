@@ -1,0 +1,16 @@
+{
+  "name": "seed/nationalize",
+  "description": "Predict the likely nationality of a first name using the Nationalize.io API.",
+  "agent_type": "http",
+  "category": "data",
+  "api_url": "https://api.nationalize.io",
+  "method": "GET",
+  "headers": {},
+  "query_params": {
+    "name": "{query}"
+  },
+  "response_path": "",
+  "capabilities": ["nationality", "name", "prediction", "demographics"],
+  "seeded": true,
+  "seed_version": 1
+}

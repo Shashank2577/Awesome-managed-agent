@@ -52,6 +52,8 @@ class Agent(abc.ABC, metaclass=AgentMeta):
     capabilities: list[str] = []
     input_schema: dict | None = None
     output_schema: dict | None = None
+    category: str | None = None
+    agent_type: str = "http"
 
     def __init__(self) -> None:
         self._messages: list[str] = []
@@ -88,6 +90,8 @@ class Agent(abc.ABC, metaclass=AgentMeta):
             "capabilities": list(self.capabilities),
             "input_schema": self.input_schema,
             "output_schema": self.output_schema,
+            "category": self.category,
+            "agent_type": self.agent_type,
         }
 
     # ------------------------------------------------------------------

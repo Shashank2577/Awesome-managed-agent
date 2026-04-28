@@ -17,6 +17,14 @@ python -m atrium.examples.hello_world.app
 
 Open http://localhost:8080 — type a goal and watch agents work.
 
+## What Atrium Gives You Out of the Box
+
+- **185+ pre-built agents** across 11 categories (research, coding, writing, security, data, ops, design, communication, analysis, creative, productivity)
+- Observable, cost-bounded execution via LangGraph
+- Human-in-the-loop controls (pause, approve, reject)
+- Built-in dashboard with real-time agent visualization
+- SQLite persistence — threads and agents survive restarts
+
 ## Two Ways to Build Agents
 
 ### Option 1: From the Dashboard (no code)
@@ -90,10 +98,27 @@ Run with the hello_world example pre-loaded:
 docker run -p 8080:8080 -e GEMINI_API_KEY=your-key atrium atrium example run hello_world
 ```
 
+## Agent Marketplace
+
+Atrium ships with **185+ pre-built agents** across 11 categories: research, coding, writing, security, data, ops, design, communication, analysis, creative, and productivity.
+
+Two agent types are included:
+- **HTTP API wrappers** — config-driven agents that call public REST APIs (no code required)
+- **LLM experts** — config-driven agents with a system prompt and a model
+
+Browse by category in the dashboard sidebar. Re-seed or reset the corpus via the CLI:
+
+```bash
+atrium agents seed           # seed on fresh install
+atrium agents seed --force   # reset corpus to defaults
+```
+
+See [Seeding Agents](docs/guide/seeding-agents.md) for the full guide and [CREDITS](docs/CREDITS.md) for third-party attributions.
+
 ## Dashboard Features
 
 - **Real-time execution** — watch agents plan, execute, and report live via SSE
-- **Agent management** — create, view, edit, delete agents from the UI
+- **Agent management** — create, view, edit, delete agents from the UI; browse 185+ built-in agents by category
 - **Plan visualization** — DAG graph showing agent dependencies
 - **HITL controls** — pause, resume, cancel, approve, reject mid-execution
 - **Budget tracking** — live cost bar with guardrail enforcement
@@ -110,9 +135,13 @@ pytest tests/ -v  # 103 tests
 
 - [Getting Started](docs/getting-started.md)
 - [Writing Agents](docs/guide/writing-agents.md)
+- [Seeding Agents](docs/guide/seeding-agents.md)
 - [Agent Patterns](docs/guide/agent-patterns.md)
 - [Testing](docs/guide/testing-agents.md)
 - [Concepts](docs/guide/concepts.md)
+- [API Reference](docs/spec/API.md)
+- [Data Model](docs/spec/DATA_MODEL.md)
+- [Credits](docs/CREDITS.md)
 
 ## What's Inside
 

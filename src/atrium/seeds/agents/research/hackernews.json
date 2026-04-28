@@ -1,0 +1,17 @@
+{
+  "name": "seed/hackernews",
+  "description": "Search Hacker News stories by keyword using the Algolia HN API.",
+  "agent_type": "http",
+  "category": "research",
+  "api_url": "https://hn.algolia.com/api/v1/search",
+  "method": "GET",
+  "headers": {},
+  "query_params": {
+    "query": "{query}",
+    "tags": "story"
+  },
+  "response_path": "hits",
+  "capabilities": ["hacker-news", "tech-news", "stories", "search"],
+  "seeded": true,
+  "seed_version": 1
+}

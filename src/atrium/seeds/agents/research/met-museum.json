@@ -1,0 +1,16 @@
+{
+  "name": "seed/met-museum",
+  "description": "Search the Metropolitan Museum of Art collection for artworks by keyword.",
+  "agent_type": "http",
+  "category": "research",
+  "api_url": "https://collectionapi.metmuseum.org/public/collection/v1/search",
+  "method": "GET",
+  "headers": {},
+  "query_params": {
+    "q": "{query}"
+  },
+  "response_path": "objectIDs",
+  "capabilities": ["art", "museum", "metropolitan", "collection", "search"],
+  "seeded": true,
+  "seed_version": 1
+}

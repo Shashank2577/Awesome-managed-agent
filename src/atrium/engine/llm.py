@@ -45,7 +45,7 @@ def _strip_markdown_fence(text: str) -> str:
 
 
 class LLMClient:
-    """Unified LLM client for Commander planning calls."""
+    """Unified LLM client for Commander and config-driven agent calls."""
 
     def __init__(self, config: str = "openai:gpt-4o-mini"):
         self._provider, self._model = parse_llm_config(config)
@@ -70,13 +70,26 @@ class LLMClient:
         else:
             raise ValueError(f"Unknown LLM provider: {self._provider}")
 
-    async def generate_json(self, system_prompt: str, user_prompt: str) -> dict[str, Any]:
-        """Send a system+user prompt and parse the response as JSON."""
+    async def generate_text(self, system_prompt: str, user_prompt: str) -> str:
+        """Send a system+user prompt and return the raw text response.
+
+        Args:
+            system_prompt: The system-level instruction for the model.
+            user_prompt: The user-level message / query.
+
+        Returns:
+            Stripped text content from the model response.
+        """
         model = self._get_chat_model()
         messages = [
             SystemMessage(content=system_prompt),
             HumanMessage(content=user_prompt),
         ]
         response = await model.ainvoke(messages)
-        text = _strip_markdown_fence(response.content)
+        return response.content.strip()
+
+    async def generate_json(self, system_prompt: str, user_prompt: str) -> dict[str, Any]:
+        """Send a system+user prompt and parse the response as JSON."""
+        text = await self.generate_text(system_prompt, user_prompt)
+        text = _strip_markdown_fence(text)
         return json.loads(text)

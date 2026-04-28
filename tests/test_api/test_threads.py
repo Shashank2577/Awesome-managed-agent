@@ -25,7 +25,7 @@ def registry():
 
 @pytest.fixture
 def app(registry):
-    return create_app(registry=registry, llm_config="openai:gpt-4o-mini")
+    return create_app(registry=registry, llm_config="openai:gpt-4o-mini", db_path=":memory:")
 
 
 async def test_create_thread(app):

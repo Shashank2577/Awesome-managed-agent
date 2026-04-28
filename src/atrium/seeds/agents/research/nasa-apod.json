@@ -1,0 +1,17 @@
+{
+  "name": "seed/nasa-apod",
+  "description": "Fetch NASA's Astronomy Picture of the Day with title, explanation, and image URL.",
+  "agent_type": "http",
+  "category": "research",
+  "api_url": "https://api.nasa.gov/planetary/apod",
+  "method": "GET",
+  "headers": {},
+  "query_params": {
+    "api_key": "DEMO_KEY",
+    "count": "1"
+  },
+  "response_path": "",
+  "capabilities": ["nasa", "astronomy", "space", "apod", "science"],
+  "seeded": true,
+  "seed_version": 1
+}

@@ -34,6 +34,7 @@
           <span class="title">Agents</span>
           <span class="muted mono" id="agentCount">0</span>
         </div>
+        <div id="category-filter-row"></div>
         <div class="rail-body" id="agentList"></div>
       </aside>
 
@@ -128,27 +129,52 @@
             <input id="agentCaps" type="text" placeholder="weather, location, forecast" />
           </div>
           <div class="form-group">
-            <label>API URL</label>
-            <input id="agentUrl" type="text" placeholder="https://api.example.com/data" />
-          </div>
-          <div class="form-group">
-            <label>Method</label>
-            <select id="agentMethod">
-              <option value="GET">GET</option>
-              <option value="POST">POST</option>
+            <label>Agent Type</label>
+            <select id="agentType" onchange="toggleAgentTypeFields()">
+              <option value="http">HTTP API Agent</option>
+              <option value="llm">LLM Agent</option>
             </select>
           </div>
           <div class="form-group">
-            <label>Headers (one per line, key: value)</label>
-            <textarea id="agentHeaders" rows="2" placeholder="Authorization: Bearer xxx"></textarea>
+            <label>Category</label>
+            <select id="agentCategory">
+              <option value="">-- select category --</option>
+            </select>
           </div>
-          <div class="form-group">
-            <label>Query Parameters (one per line, key=value, use {query} for input)</label>
-            <textarea id="agentParams" rows="3" placeholder="q={query}&#10;format=json"></textarea>
+          <div id="httpFields">
+            <div class="form-group">
+              <label>API URL</label>
+              <input id="agentUrl" type="text" placeholder="https://api.example.com/data" />
+            </div>
+            <div class="form-group">
+              <label>Method</label>
+              <select id="agentMethod">
+                <option value="GET">GET</option>
+                <option value="POST">POST</option>
+              </select>
+            </div>
+            <div class="form-group">
+              <label>Headers (one per line, key: value)</label>
+              <textarea id="agentHeaders" rows="2" placeholder="Authorization: Bearer xxx"></textarea>
+            </div>
+            <div class="form-group">
+              <label>Query Parameters (one per line, key=value, use {query} for input)</label>
+              <textarea id="agentParams" rows="3" placeholder="q={query}&#10;format=json"></textarea>
+            </div>
+            <div class="form-group">
+              <label>Response Path (dot notation to extract data)</label>
+              <input id="agentResponsePath" type="text" placeholder="data.results" />
+            </div>
           </div>
-          <div class="form-group">
-            <label>Response Path (dot notation to extract data)</label>
-            <input id="agentResponsePath" type="text" placeholder="data.results" />
+          <div id="llmFields" style="display:none;">
+            <div class="form-group">
+              <label>System Prompt</label>
+              <textarea id="agentSystemPrompt" rows="5" placeholder="System prompt..."></textarea>
+            </div>
+            <div class="form-group">
+              <label>Model</label>
+              <input id="agentModel" type="text" placeholder="Model (default: anthropic:claude-sonnet-4-6)" />
+            </div>
           </div>
         </div>
         <div class="modal-footer">

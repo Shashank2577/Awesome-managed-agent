@@ -1000,6 +1000,116 @@ section.block {
   line-height: 1.5;
 }
 
+/* =============================================================
+   Category filter pill row
+============================================================= */
+
+.category-filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: var(--space-2) var(--space-3);
+  border-bottom: 1px solid var(--line);
+}
+
+.category-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  background: transparent;
+  color: var(--text-3);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 180ms var(--ease-out), border-color 180ms var(--ease-out), color 180ms var(--ease-out);
+  white-space: nowrap;
+}
+
+.category-pill:hover {
+  background: rgba(124,92,255,0.1);
+  border-color: rgba(124,92,255,0.4);
+  color: var(--text-1);
+}
+
+.category-pill.active {
+  background: rgba(124,92,255,0.18);
+  border-color: rgba(124,92,255,0.6);
+  color: var(--brand-1);
+}
+
+/* Agent detail badges */
+.agent-type-tag {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  background: rgba(41,192,255,0.14);
+  color: var(--brand-2);
+  border: 1px solid rgba(41,192,255,0.3);
+}
+
+.agent-category-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  background: rgba(95,255,208,0.1);
+  color: var(--brand-3);
+  border: 1px solid rgba(95,255,208,0.25);
+}
+
+/* system_prompt collapsible */
+.system-prompt-details {
+  margin-top: 8px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-s);
+  overflow: hidden;
+}
+
+.system-prompt-details summary {
+  padding: 6px 10px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-3);
+  cursor: pointer;
+  background: rgba(255,255,255,0.025);
+  list-style: none;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.system-prompt-details summary::before {
+  content: "▶";
+  font-size: 9px;
+  transition: transform 200ms var(--ease-out);
+}
+
+.system-prompt-details[open] summary::before {
+  transform: rotate(90deg);
+}
+
+.system-prompt-details pre {
+  margin: 0;
+  padding: 10px 12px;
+  font-family: var(--font-mono);
+  font-size: 12px;
+  color: var(--text-2);
+  white-space: pre-wrap;
+  word-break: break-word;
+  background: rgba(0,0,0,0.2);
+  max-height: 200px;
+  overflow: auto;
+}
+
 /* respect reduced motion */
 @media (prefers-reduced-motion: reduce) {
   * { animation-duration: 0.001ms !important; transition-duration: 0.001ms !important; }

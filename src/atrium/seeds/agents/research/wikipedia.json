@@ -1,0 +1,14 @@
+{
+  "name": "seed/wikipedia",
+  "description": "Fetch the summary of a Wikipedia article by topic or title.",
+  "agent_type": "http",
+  "category": "research",
+  "api_url": "https://en.wikipedia.org/api/rest_v1/page/summary/{query}",
+  "method": "GET",
+  "headers": {},
+  "query_params": {},
+  "response_path": "extract",
+  "capabilities": ["wikipedia", "encyclopedia", "facts", "lookup"],
+  "seeded": true,
+  "seed_version": 1
+}

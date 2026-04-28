@@ -1,0 +1,14 @@
+{
+  "name": "seed/pokemon",
+  "description": "Look up stats, types, abilities, and moves for any Pokémon by name or ID.",
+  "agent_type": "http",
+  "category": "data",
+  "api_url": "https://pokeapi.co/api/v2/pokemon/{query}",
+  "method": "GET",
+  "headers": {},
+  "query_params": {},
+  "response_path": "",
+  "capabilities": ["pokemon", "pokeapi", "game", "lookup"],
+  "seeded": true,
+  "seed_version": 1
+}

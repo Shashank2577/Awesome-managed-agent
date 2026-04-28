@@ -1,0 +1,16 @@
+{
+  "name": "seed/genderize",
+  "description": "Predict the likely gender of a first name using the Genderize.io API.",
+  "agent_type": "http",
+  "category": "data",
+  "api_url": "https://api.genderize.io",
+  "method": "GET",
+  "headers": {},
+  "query_params": {
+    "name": "{query}"
+  },
+  "response_path": "",
+  "capabilities": ["gender", "name", "prediction", "demographics"],
+  "seeded": true,
+  "seed_version": 1
+}

@@ -1,0 +1,14 @@
+{
+  "name": "seed/exchange-rates",
+  "description": "Get live currency exchange rates for a base currency code (e.g. USD, EUR, GBP).",
+  "agent_type": "http",
+  "category": "data",
+  "api_url": "https://open.er-api.com/v6/latest/{query}",
+  "method": "GET",
+  "headers": {},
+  "query_params": {},
+  "response_path": "rates",
+  "capabilities": ["currency", "exchange-rates", "forex", "finance"],
+  "seeded": true,
+  "seed_version": 1
+}

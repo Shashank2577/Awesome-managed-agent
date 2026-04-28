@@ -1,0 +1,18 @@
+{
+  "name": "seed/world-bank",
+  "description": "Search World Bank development documents and indicators by keyword.",
+  "agent_type": "http",
+  "category": "research",
+  "api_url": "https://search.worldbank.org/api/v2/wds",
+  "method": "GET",
+  "headers": {},
+  "query_params": {
+    "qterm": "{query}",
+    "format": "json",
+    "rows": "10"
+  },
+  "response_path": "documents",
+  "capabilities": ["world-bank", "development", "economics", "indicators", "research"],
+  "seeded": true,
+  "seed_version": 1
+}
