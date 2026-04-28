@@ -39,6 +39,8 @@ class AgentInfoResponse(BaseModel):
     capabilities: list[str]
     input_schema: Optional[dict] = None
     output_schema: Optional[dict] = None
+    category: Optional[str] = None
+    agent_type: str = "http"
 
 
 class AgentListResponse(BaseModel):

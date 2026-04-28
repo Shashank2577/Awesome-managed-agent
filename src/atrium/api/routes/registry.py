@@ -1,9 +1,12 @@
 """Agent registry routes — list and detail."""
 from __future__ import annotations
 
+from typing import Optional
+
 from fastapi import APIRouter, HTTPException
 
 from atrium.api.schemas import AgentInfoResponse, AgentListResponse
+from atrium.core.categories import CATEGORIES
 
 router = APIRouter()
 
@@ -30,18 +33,35 @@ def _agent_info(cls) -> AgentInfoResponse:
         capabilities=list(cls.capabilities),
         input_schema=_serialize_schema(cls.input_schema),
         output_schema=_serialize_schema(cls.output_schema),
+        category=getattr(cls, "category", None),
+        agent_type=getattr(cls, "agent_type", "http"),
     )
 
 
+@router.get("/agents/categories")
+async def list_categories() -> dict:
+    """Return all valid agent category values."""
+    return {"categories": list(CATEGORIES)}
+
+
 @router.get("/agents", response_model=AgentListResponse)
-async def list_agents() -> AgentListResponse:
-    """Return all registered agents with their capabilities."""
+async def list_agents(category: Optional[str] = None) -> AgentListResponse:
+    """Return all registered agents with their capabilities.
+
+    Optional ``?category=<cat>`` query param filters results server-side.
+    """
     from atrium.api.app import get_registry
 
     registry = get_registry()
     if registry is None:
         return AgentListResponse(agents=[])
-    return AgentListResponse(agents=[_agent_info(cls) for cls in registry.list_all()])
+
+    agents = [_agent_info(cls) for cls in registry.list_all()]
+
+    if category is not None:
+        agents = [a for a in agents if a.category == category]
+
+    return AgentListResponse(agents=agents)
 
 
 @router.get("/agents/{name}", response_model=AgentInfoResponse)

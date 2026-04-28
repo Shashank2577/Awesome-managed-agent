@@ -2,8 +2,10 @@
 
 from __future__ import annotations
 
+from typing import Literal
+
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 
 router = APIRouter()
 
@@ -16,11 +18,27 @@ class CreateAgentRequest(BaseModel):
     name: str
     description: str
     capabilities: list[str] = []
-    api_url: str
+    api_url: str | None = None
     method: str = "GET"
     headers: dict[str, str] = {}
     query_params: dict[str, str] = {}
     response_path: str = ""
+    agent_type: Literal["http", "llm"] = "http"
+    category: str | None = None
+    system_prompt: str | None = None
+    model: str | None = None
+
+    @model_validator(mode="after")
+    def _validate_type_fields(self) -> "CreateAgentRequest":
+        if self.agent_type == "http" and not self.api_url:
+            raise ValueError(
+                "api_url is required for HTTP agents"
+            )
+        if self.agent_type == "llm" and not self.system_prompt:
+            raise ValueError(
+                "system_prompt is required for LLM agents"
+            )
+        return self
 
 
 # ------------------------------------------------------------------
@@ -29,8 +47,9 @@ class CreateAgentRequest(BaseModel):
 
 @router.post("/agents/create", status_code=201)
 async def create_agent(req: CreateAgentRequest) -> dict:
-    """Create a new config-driven HTTP agent and register it."""
+    """Create a new config-driven agent and register it."""
     from atrium.api.app import get_registry, get_agent_store
+    from atrium.core import agent_factory
 
     registry = get_registry()
     store = get_agent_store()
@@ -48,9 +67,7 @@ async def create_agent(req: CreateAgentRequest) -> dict:
         pass
 
     # Create the Agent subclass and register it
-    from atrium.core.http_agent import create_agent_class
-
-    agent_cls = create_agent_class(config)
+    agent_cls = agent_factory.build_agent_class(config)
     registry.register(agent_cls)
 
     # Persist so the agent survives restarts

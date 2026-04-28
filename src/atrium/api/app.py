@@ -13,7 +13,7 @@ from atrium.api.routes import health, threads, control, registry as registry_rou
 from atrium.api.routes import agent_builder
 from atrium.core.agent_store import AgentStore
 from atrium.core.guardrails import GuardrailsConfig
-from atrium.core.http_agent import create_agent_class
+from atrium.core import agent_factory
 from atrium.core.registry import AgentRegistry
 from atrium.engine.orchestrator import ThreadOrchestrator
 from atrium.streaming.events import EventRecorder
@@ -72,7 +72,7 @@ def create_app(
     # Load previously-saved config-driven agents into the registry
     for saved_config in _agent_store.load_all():
         try:
-            agent_cls = create_agent_class(saved_config)
+            agent_cls = agent_factory.build_agent_class(saved_config)
             _registry.register(agent_cls)
         except Exception:
             pass  # skip broken configs on startup
