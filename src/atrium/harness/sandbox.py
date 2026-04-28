@@ -152,6 +152,8 @@ class DockerSandboxRunner(SandboxRunner):
         limits: ResourceLimits,
         network_policy: NetworkPolicy,
         registry: str = "atrium",
+        mcp_socket_path: str | None = None,
+        session_token: str | None = None,
     ) -> "DockerSandboxRunner":
         try:
             import aiodocker
@@ -164,7 +166,17 @@ class DockerSandboxRunner(SandboxRunner):
         image = runtime.image_tag(registry)
 
         env_list = [f"{k}={v}" for k, v in env.items()]
-        env_list.append(f"ATRIUM_WORKSPACE_DIR=/workspace")
+        env_list.append("ATRIUM_WORKSPACE_DIR=/workspace")
+
+        # Phase 4: MCP gateway wiring
+        _mcp_socket = "/run/atrium/mcp.sock"
+        if network_policy.allow_mcp and mcp_socket_path and session_token:
+            env_list.append(f"ATRIUM_MCP_SOCKET={_mcp_socket}")
+            env_list.append(f"ATRIUM_SESSION_TOKEN={session_token}")
+
+        binds = [f"{session.workspace_path}:/workspace:rw"]
+        if network_policy.allow_mcp and mcp_socket_path:
+            binds.append(f"{mcp_socket_path}:{_mcp_socket}:rw")
 
         config = {
             "Image": image,
@@ -178,7 +190,7 @@ class DockerSandboxRunner(SandboxRunner):
             "OpenStdin": True,
             "StdinOnce": False,
             "HostConfig": {
-                "Binds": [f"{session.workspace_path}:/workspace:rw"],
+                "Binds": binds,
                 "Memory": limits.memory_mb * 1024 * 1024,
                 "NanoCpus": int(limits.cpus * 1_000_000_000),
                 "AutoRemove": True,
