@@ -214,6 +214,12 @@ def main():
         metavar="PATH",
         help="Load seed JSON files from PATH instead of the built-in corpus",
     )
+    seed_p.add_argument(
+        "--db",
+        default="atrium_agents.db",
+        metavar="PATH",
+        help="SQLite database path (default: atrium_agents.db)",
+    )
     seed_p.set_defaults(func=cmd_agents_seed)
 
     args = parser.parse_args()
