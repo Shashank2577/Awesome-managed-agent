@@ -84,6 +84,8 @@ async def create_agent(req: CreateAgentRequest) -> dict:
         agent_cls = agent_factory.build_agent_class(config)
     except NotImplementedError as e:
         raise HTTPException(status_code=501, detail=str(e))
+    except ValueError as e:
+        raise HTTPException(status_code=422, detail=str(e))
     registry.register(agent_cls)
 
     # Persist so the agent survives restarts

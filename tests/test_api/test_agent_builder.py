@@ -163,3 +163,17 @@ async def test_null_category_is_accepted(app):
     async with AsyncClient(transport=transport, base_url="http://test") as client:
         resp = await client.post("/api/v1/agents/create", json=payload)
     assert resp.status_code == 201
+
+
+async def test_unknown_agent_type_returns_422(app):
+    """agent_type='unknown_type' should return 422, not 500."""
+    payload = {
+        "name": "unknown_type_agent",
+        "description": "Agent with unknown type",
+        "api_url": "https://example.com/api",
+        "agent_type": "unknown_type",
+    }
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post("/api/v1/agents/create", json=payload)
+    assert resp.status_code == 422

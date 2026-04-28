@@ -21,6 +21,7 @@ def test_parse_llm_config_anthropic():
     assert model == "claude-sonnet-4-6"
 
 
+@pytest.mark.asyncio
 async def test_generate_json_returns_parsed_dict():
     client = LLMClient("openai:gpt-4o-mini")
 
@@ -36,6 +37,7 @@ async def test_generate_json_returns_parsed_dict():
         assert result == {"plan": "test"}
 
 
+@pytest.mark.asyncio
 async def test_generate_json_handles_markdown_fence():
     client = LLMClient("openai:gpt-4o-mini")
 
@@ -51,6 +53,7 @@ async def test_generate_json_handles_markdown_fence():
         assert result == {"plan": "test"}
 
 
+@pytest.mark.asyncio
 async def test_generate_text_returns_raw_string():
     """generate_text returns stripped text without JSON parsing."""
     client = LLMClient("openai:gpt-4o-mini")
@@ -67,6 +70,7 @@ async def test_generate_text_returns_raw_string():
         assert result == "Hello, I am an LLM."
 
 
+@pytest.mark.asyncio
 async def test_generate_text_does_not_parse_json():
     """generate_text returns plain text even when content looks like JSON."""
     client = LLMClient("openai:gpt-4o-mini")
@@ -85,6 +89,7 @@ async def test_generate_text_does_not_parse_json():
         assert result == '{"key": "value"}'
 
 
+@pytest.mark.asyncio
 async def test_generate_json_calls_generate_text_internally():
     """generate_json delegates to generate_text and then parses the result."""
     client = LLMClient("openai:gpt-4o-mini")

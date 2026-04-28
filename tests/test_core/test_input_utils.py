@@ -61,3 +61,9 @@ def test_upstream_non_dict_value_skipped():
     # No dict value found — falls back to str(input_data)[:200]
     result = extract_query(input_data)
     assert result == str(input_data)[:200]
+
+
+def test_upstream_none_does_not_crash():
+    """upstream=None should not raise AttributeError."""
+    result = extract_query({"upstream": None})
+    assert isinstance(result, str)

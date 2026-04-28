@@ -45,7 +45,7 @@ def _strip_markdown_fence(text: str) -> str:
 
 
 class LLMClient:
-    """Unified LLM client for Commander planning calls."""
+    """Unified LLM client for Commander and config-driven agent calls."""
 
     def __init__(self, config: str = "openai:gpt-4o-mini"):
         self._provider, self._model = parse_llm_config(config)

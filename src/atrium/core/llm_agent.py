@@ -60,13 +60,27 @@ def create_agent_class(config: dict[str, Any]) -> type[Agent]:
         input_schema = _input_schema
         output_schema = _output_schema
 
+        def __init__(self) -> None:
+            super().__init__()
+            from atrium.engine.llm import LLMClient as _LLMClient
+            self._llm_client = _LLMClient(config=resolved_model)
+
         async def run(self, input_data: dict) -> dict:
             query = extract_query(input_data)
 
             try:
-                from atrium.engine.llm import LLMClient
-                llm_client = LLMClient(config=resolved_model)
-                text = await llm_client.generate_text(system_prompt, query)
+                try:
+                    await self.say(f"[{agent_name}] Querying {resolved_model}…")
+                except Exception:
+                    pass
+
+                text = await self._llm_client.generate_text(system_prompt, query)
+
+                try:
+                    await self.say(f"[{agent_name}] Done.")
+                except Exception:
+                    pass
+
                 return {
                     "response": text,
                     "model": resolved_model,

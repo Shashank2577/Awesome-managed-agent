@@ -115,13 +115,13 @@ def test_none_system_prompt_raises_value_error():
 async def test_run_returns_expected_keys():
     """run() returns dict with response, model, source keys."""
     cls = create_agent_class(_base_config())
-    instance = cls()
 
     with patch("atrium.engine.llm.LLMClient") as MockLLMClient:
         mock_client = AsyncMock()
         mock_client.generate_text = AsyncMock(return_value="Hello there!")
         MockLLMClient.return_value = mock_client
 
+        instance = cls()
         result = await instance.run({"query": "hi"})
 
     assert result["response"] == "Hello there!"
@@ -134,13 +134,13 @@ async def test_run_returns_expected_keys():
 async def test_run_uses_extract_query():
     """run() resolves query from upstream data."""
     cls = create_agent_class(_base_config())
-    instance = cls()
 
     with patch("atrium.engine.llm.LLMClient") as MockLLMClient:
         mock_client = AsyncMock()
         mock_client.generate_text = AsyncMock(return_value="response text")
         MockLLMClient.return_value = mock_client
 
+        instance = cls()
         input_data = {"upstream": {"prev": {"result": "upstream content"}}}
         result = await instance.run(input_data)
 
@@ -158,7 +158,6 @@ async def test_run_uses_extract_query():
 async def test_run_swallows_llm_exception():
     """run() returns error dict instead of raising when LLMClient fails."""
     cls = create_agent_class(_base_config())
-    instance = cls()
 
     with patch("atrium.engine.llm.LLMClient") as MockLLMClient:
         mock_client = AsyncMock()
@@ -167,6 +166,7 @@ async def test_run_swallows_llm_exception():
         )
         MockLLMClient.return_value = mock_client
 
+        instance = cls()
         result = await instance.run({"query": "anything"})
 
     assert result["response"] == ""
@@ -178,13 +178,13 @@ async def test_run_swallows_llm_exception():
 async def test_run_error_dict_has_no_model_key():
     """Error response dict does not include 'model' key."""
     cls = create_agent_class(_base_config())
-    instance = cls()
 
     with patch("atrium.engine.llm.LLMClient") as MockLLMClient:
         mock_client = AsyncMock()
         mock_client.generate_text = AsyncMock(side_effect=ValueError("bad"))
         MockLLMClient.return_value = mock_client
 
+        instance = cls()
         result = await instance.run({"query": "q"})
 
     assert "model" not in result
@@ -201,3 +201,18 @@ def test_each_call_returns_distinct_class():
     cls_b = create_agent_class(_base_config(name="llm_b", description="B"))
     assert cls_a is not cls_b
     assert cls_a.name != cls_b.name
+
+
+# ---------------------------------------------------------------------------
+# Model resolution
+# ---------------------------------------------------------------------------
+
+def test_model_without_prefix_calls_detect_llm():
+    """Config with model='claude-sonnet-4-6' (no colon) should call detect_llm()."""
+    config = _base_config(model="claude-sonnet-4-6")
+
+    with patch("atrium.engine.llm.detect_llm", return_value="anthropic:claude-sonnet-4-6") as mock_detect:
+        cls = create_agent_class(config)
+
+    mock_detect.assert_called_once()
+    assert cls.agent_type == "llm"

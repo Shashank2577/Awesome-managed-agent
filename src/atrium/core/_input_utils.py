@@ -22,7 +22,7 @@ def extract_query(input_data: dict) -> str:
     query: str = input_data.get("query", "")
 
     if not query:
-        upstream = input_data.get("upstream", {})
+        upstream = input_data.get("upstream") or {}
         for v in upstream.values():
             if isinstance(v, dict):
                 query = (
