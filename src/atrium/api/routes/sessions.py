@@ -317,6 +317,8 @@ async def _run_gemini_session(
             ]},
         })
         await emit("THREAD_RUNNING", {})
+        if sess_store:
+            await sess_store.set_status(workspace_id, session_id, SessionStatus.RUNNING)
         await emit("AGENT_HIRED", {
             "agent_key": "gemini", "role": f"gemini/{model}",
             "objective": objective[:80], "depends_on": [],
@@ -388,6 +390,8 @@ async def _run_echo_simulation(
         })
         await asyncio.sleep(0.3)
         await emit("THREAD_RUNNING", {})
+        if sess_store:
+            await sess_store.set_status(workspace_id, session_id, SessionStatus.RUNNING)
         await emit("AGENT_HIRED", {
             "agent_key": "executor", "role": "echo-executor",
             "objective": objective[:80], "depends_on": [],
