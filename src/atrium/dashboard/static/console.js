@@ -657,11 +657,59 @@ async function refreshThreads() {
 // Agent management
 // ---------------------------------------------------------------
 
+let currentCategoryFilter = null;
+let cachedCategories = null;
+
+async function renderCategoryPills(categories) {
+  const host = $("#category-filter-row");
+  if (!host) return;
+
+  host.className = "category-filter-row";
+  host.innerHTML = "";
+
+  const allPill = document.createElement("button");
+  allPill.className = `category-pill${currentCategoryFilter === null ? " active" : ""}`;
+  allPill.textContent = "All";
+  allPill.addEventListener("click", () => {
+    currentCategoryFilter = null;
+    refreshAgents();
+  });
+  host.appendChild(allPill);
+
+  (categories || []).forEach((cat) => {
+    const pill = document.createElement("button");
+    pill.className = `category-pill${currentCategoryFilter === cat ? " active" : ""}`;
+    pill.textContent = cat;
+    pill.addEventListener("click", () => {
+      currentCategoryFilter = cat;
+      refreshAgents();
+    });
+    host.appendChild(pill);
+  });
+}
+
+async function loadCategories() {
+  if (cachedCategories) return cachedCategories;
+  try {
+    const data = await api("/api/v1/agents/categories");
+    cachedCategories = data.categories || [];
+  } catch (e) {
+    cachedCategories = [];
+  }
+  return cachedCategories;
+}
+
 async function refreshAgents() {
   try {
-    const data = await api("/api/v1/agents");
+    const url = currentCategoryFilter
+      ? `/api/v1/agents?category=${encodeURIComponent(currentCategoryFilter)}`
+      : "/api/v1/agents";
+    const data = await api(url);
     const agents = data.agents || [];
     const host = $("#agentList");
+    // Re-render pills to reflect updated active state
+    if (cachedCategories) renderCategoryPills(cachedCategories);
+    // Update count to reflect visible agents
     $("#agentCount").textContent = agents.length;
 
     if (agents.length === 0) {
@@ -669,13 +717,17 @@ async function refreshAgents() {
       return;
     }
 
-    host.innerHTML = agents.map(a => `
-      <div class="agent-row" data-name="${escape(a.name)}">
-        <div class="agent-row-name">${escape(a.name)}</div>
-        <div class="agent-row-desc">${escape(a.description).slice(0, 60)}</div>
-        <div class="agent-row-caps">${(a.capabilities || []).map(c => `<span class="cap-tag">${escape(c)}</span>`).join("")}</div>
-      </div>
-    `).join("");
+    host.innerHTML = agents.map(a => {
+      const displayName = a.name.replace(/^seed\//, "");
+      const categoryBadge = a.category ? `<span class="agent-category-badge">${escape(a.category)}</span>` : "";
+      return `
+        <div class="agent-row" data-name="${escape(a.name)}">
+          <div class="agent-row-name" style="display:flex;align-items:center;gap:6px;">${escape(displayName)}${categoryBadge}</div>
+          <div class="agent-row-desc">${escape(a.description).slice(0, 60)}</div>
+          <div class="agent-row-caps">${(a.capabilities || []).map(c => `<span class="cap-tag">${escape(c)}</span>`).join("")}</div>
+        </div>
+      `;
+    }).join("");
 
     host.querySelectorAll(".agent-row").forEach(row => {
       row.addEventListener("click", () => showAgentDetail(row.dataset.name));
@@ -701,7 +753,10 @@ async function showAgentDetail(name) {
       // Agent might be code-defined, no config available
     }
 
-    $("#agentDetailName").textContent = agent.name;
+    const displayName = agent.name.replace(/^seed\//, "");
+    const categoryBadge = agent.category ? `<span class="agent-category-badge" style="margin-left:8px;">${escape(agent.category)}</span>` : "";
+    const agentTypeTag = agent.agent_type ? `<span class="agent-type-tag" style="margin-left:6px;">${escape(agent.agent_type.toUpperCase())}</span>` : "";
+    $("#agentDetailName").innerHTML = `${escape(displayName)}${categoryBadge}${agentTypeTag}`;
 
     let html = `
       <div class="detail-section">
@@ -728,6 +783,19 @@ async function showAgentDetail(name) {
         <div class="detail-section">
           <div class="detail-label">Output Schema</div>
           <div class="detail-value mono" style="font-size:12px; background:rgba(0,0,0,0.2); padding:8px 10px; border-radius:var(--radius-s); border:1px solid var(--line); white-space:pre-wrap;">${escape(JSON.stringify(agent.output_schema, null, 2))}</div>
+        </div>
+      `;
+    }
+
+    // Show system_prompt collapsible for LLM agents
+    if (agent.agent_type === "llm" && agent.system_prompt) {
+      html += `
+        <div class="detail-section">
+          <div class="detail-label">System Prompt</div>
+          <details class="system-prompt-details">
+            <summary>System Prompt</summary>
+            <pre>${escape(agent.system_prompt)}</pre>
+          </details>
         </div>
       `;
     }
@@ -917,18 +985,49 @@ function showToast(message, isError = false) {
   }, 3500);
 }
 
+function toggleAgentTypeFields() {
+  const agentType = document.getElementById("agentType")?.value || "http";
+  const httpFields = document.getElementById("httpFields");
+  const llmFields = document.getElementById("llmFields");
+  if (httpFields) httpFields.style.display = agentType === "http" ? "" : "none";
+  if (llmFields) llmFields.style.display = agentType === "llm" ? "" : "none";
+}
+
+async function populateCategorySelect() {
+  const sel = document.getElementById("agentCategory");
+  if (!sel) return;
+  // Only populate if still just the default option
+  if (sel.options.length > 1) return;
+  const categories = await loadCategories();
+  categories.forEach((cat) => {
+    const opt = document.createElement("option");
+    opt.value = cat;
+    opt.textContent = cat;
+    sel.appendChild(opt);
+  });
+}
+
 function openAgentModal() {
   $("#agentModal").style.display = "flex";
+  // Reset type fields to default state
+  toggleAgentTypeFields();
+  // Populate category dropdown (no-op if already populated)
+  populateCategorySelect();
 }
 
 function closeAgentModal() {
   $("#agentModal").style.display = "none";
-  ["agentName", "agentDesc", "agentCaps", "agentUrl", "agentHeaders", "agentParams", "agentResponsePath"].forEach((id) => {
+  ["agentName", "agentDesc", "agentCaps", "agentUrl", "agentHeaders", "agentParams", "agentResponsePath", "agentSystemPrompt", "agentModel"].forEach((id) => {
     const el = document.getElementById(id);
     if (el) el.value = "";
   });
   const sel = document.getElementById("agentMethod");
   if (sel) sel.value = "GET";
+  const typeSel = document.getElementById("agentType");
+  if (typeSel) typeSel.value = "http";
+  const catSel = document.getElementById("agentCategory");
+  if (catSel) catSel.value = "";
+  toggleAgentTypeFields();
 }
 
 async function createAgent() {
@@ -940,33 +1039,49 @@ async function createAgent() {
   }
 
   const capabilities = $("#agentCaps").value.split(",").map((s) => s.trim()).filter(Boolean);
-  const api_url = $("#agentUrl").value.trim();
-  const method = $("#agentMethod").value;
-  const response_path = $("#agentResponsePath").value.trim();
+  const agent_type = (document.getElementById("agentType")?.value || "http");
+  const category = (document.getElementById("agentCategory")?.value || "") || undefined;
 
-  const headers = {};
-  const headerText = ($("#agentHeaders").value || "").trim();
-  if (headerText) {
-    headerText.split("\n").forEach((line) => {
-      const idx = line.indexOf(":");
-      if (idx > 0) headers[line.slice(0, idx).trim()] = line.slice(idx + 1).trim();
-    });
-  }
+  let payload = { name, description, capabilities, agent_type };
+  if (category) payload.category = category;
 
-  const query_params = {};
-  const paramText = ($("#agentParams").value || "").trim();
-  if (paramText) {
-    paramText.split("\n").forEach((line) => {
-      const idx = line.indexOf("=");
-      if (idx > 0) query_params[line.slice(0, idx).trim()] = line.slice(idx + 1).trim();
-    });
+  if (agent_type === "http") {
+    const api_url = $("#agentUrl").value.trim();
+    const method = $("#agentMethod").value;
+    const response_path = $("#agentResponsePath").value.trim();
+
+    const headers = {};
+    const headerText = ($("#agentHeaders").value || "").trim();
+    if (headerText) {
+      headerText.split("\n").forEach((line) => {
+        const idx = line.indexOf(":");
+        if (idx > 0) headers[line.slice(0, idx).trim()] = line.slice(idx + 1).trim();
+      });
+    }
+
+    const query_params = {};
+    const paramText = ($("#agentParams").value || "").trim();
+    if (paramText) {
+      paramText.split("\n").forEach((line) => {
+        const idx = line.indexOf("=");
+        if (idx > 0) query_params[line.slice(0, idx).trim()] = line.slice(idx + 1).trim();
+      });
+    }
+
+    payload = { ...payload, api_url, method, headers, query_params, response_path };
+  } else {
+    // llm
+    const system_prompt = (document.getElementById("agentSystemPrompt")?.value || "").trim();
+    const modelVal = (document.getElementById("agentModel")?.value || "").trim();
+    const model = modelVal || "anthropic:claude-sonnet-4-6";
+    payload = { ...payload, system_prompt, model };
   }
 
   try {
     try {
       await api("/api/v1/agents/create", {
         method: "POST",
-        body: JSON.stringify({ name, description, capabilities, api_url, method, headers, query_params, response_path }),
+        body: JSON.stringify(payload),
       });
     } catch (err) {
       if (err.message.includes("already exists") || err.message.includes("400")) {
@@ -974,7 +1089,7 @@ async function createAgent() {
         await api(`/api/v1/agents/${name}`, { method: "DELETE" });
         await api("/api/v1/agents/create", {
           method: "POST",
-          body: JSON.stringify({ name, description, capabilities, api_url, method, headers, query_params, response_path }),
+          body: JSON.stringify(payload),
         });
       } else {
         throw err;
@@ -996,6 +1111,7 @@ window.showAgentDetail = showAgentDetail;
 window.closeAgentDetail = closeAgentDetail;
 window.deleteAgent = deleteAgent;
 window.editAgent = editAgent;
+window.toggleAgentTypeFields = toggleAgentTypeFields;
 
 // ---------------------------------------------------------------
 // Boot
@@ -1004,5 +1120,9 @@ window.editAgent = editAgent;
 (async function boot() {
   wireUI();
   try { await refreshThreads(); } catch (e) { /* ignore on first boot */ }
-  try { await refreshAgents(); } catch (e) { /* ignore on first boot */ }
+  try {
+    const categories = await loadCategories();
+    await renderCategoryPills(categories);
+    await refreshAgents();
+  } catch (e) { /* ignore on first boot */ }
 })();
