@@ -1,5 +1,5 @@
 {
-  "name": "seed/arxiv",
+  "name": "seed-arxiv",
   "description": "Search arXiv for academic papers and preprints by keyword or topic.",
   "agent_type": "http",
   "category": "research",
@@ -11,7 +11,13 @@
     "max_results": "10"
   },
   "response_path": "",
-  "capabilities": ["arxiv", "papers", "preprints", "academic", "science"],
+  "capabilities": [
+    "arxiv",
+    "papers",
+    "preprints",
+    "academic",
+    "science"
+  ],
   "seeded": true,
   "seed_version": 1
 }

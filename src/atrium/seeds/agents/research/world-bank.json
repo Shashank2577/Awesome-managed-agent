@@ -1,5 +1,5 @@
 {
-  "name": "seed/world-bank",
+  "name": "seed-world-bank",
   "description": "Search World Bank development documents and indicators by keyword.",
   "agent_type": "http",
   "category": "research",
@@ -12,7 +12,13 @@
     "rows": "10"
   },
   "response_path": "documents",
-  "capabilities": ["world-bank", "development", "economics", "indicators", "research"],
+  "capabilities": [
+    "world-bank",
+    "development",
+    "economics",
+    "indicators",
+    "research"
+  ],
   "seeded": true,
   "seed_version": 1
 }

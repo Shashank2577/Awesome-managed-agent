@@ -1,5 +1,5 @@
 {
-  "name": "seed/openfda-drugs",
+  "name": "seed-openfda-drugs",
   "description": "Search FDA drug labels and adverse event data via the OpenFDA API.",
   "agent_type": "http",
   "category": "research",
@@ -11,7 +11,13 @@
     "limit": "5"
   },
   "response_path": "results",
-  "capabilities": ["fda", "drugs", "medications", "health", "pharma"],
+  "capabilities": [
+    "fda",
+    "drugs",
+    "medications",
+    "health",
+    "pharma"
+  ],
   "seeded": true,
   "seed_version": 1
 }

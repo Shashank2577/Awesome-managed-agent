@@ -1,5 +1,5 @@
 {
-  "name": "seed/code-of-conduct",
+  "name": "seed-code-of-conduct",
   "description": "Code of Conduct",
   "agent_type": "llm",
   "category": "coding",

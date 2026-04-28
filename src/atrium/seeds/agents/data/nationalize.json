@@ -1,5 +1,5 @@
 {
-  "name": "seed/nationalize",
+  "name": "seed-nationalize",
   "description": "Predict the likely nationality of a first name using the Nationalize.io API.",
   "agent_type": "http",
   "category": "data",
@@ -10,7 +10,12 @@
     "name": "{query}"
   },
   "response_path": "",
-  "capabilities": ["nationality", "name", "prediction", "demographics"],
+  "capabilities": [
+    "nationality",
+    "name",
+    "prediction",
+    "demographics"
+  ],
   "seeded": true,
   "seed_version": 1
 }

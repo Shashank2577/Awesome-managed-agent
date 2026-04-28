@@ -1,5 +1,5 @@
 {
-  "name": "seed/air-quality-waqi",
+  "name": "seed-air-quality-waqi",
   "description": "Look up the real-time Air Quality Index (AQI) for a city using the WAQI API.",
   "agent_type": "http",
   "category": "data",
@@ -11,7 +11,13 @@
     "keyword": "{query}"
   },
   "response_path": "data",
-  "capabilities": ["air-quality", "aqi", "pollution", "environment", "health"],
+  "capabilities": [
+    "air-quality",
+    "aqi",
+    "pollution",
+    "environment",
+    "health"
+  ],
   "seeded": true,
   "seed_version": 1
 }

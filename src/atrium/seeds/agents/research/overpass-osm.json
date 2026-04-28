@@ -1,5 +1,5 @@
 {
-  "name": "seed/overpass-osm",
+  "name": "seed-overpass-osm",
   "description": "Search OpenStreetMap for places, addresses, and geographic features via the Nominatim API.",
   "agent_type": "http",
   "category": "research",
@@ -12,7 +12,13 @@
     "limit": "5"
   },
   "response_path": "",
-  "capabilities": ["openstreetmap", "geocoding", "places", "maps", "location"],
+  "capabilities": [
+    "openstreetmap",
+    "geocoding",
+    "places",
+    "maps",
+    "location"
+  ],
   "seeded": true,
   "seed_version": 1
 }

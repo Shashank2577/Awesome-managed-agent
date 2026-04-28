@@ -1,5 +1,5 @@
 {
-  "name": "seed/usgs-earthquakes",
+  "name": "seed-usgs-earthquakes",
   "description": "Retrieve recent earthquake events from the USGS Earthquake Hazards API.",
   "agent_type": "http",
   "category": "research",
@@ -12,7 +12,13 @@
     "limit": "10"
   },
   "response_path": "features",
-  "capabilities": ["earthquake", "usgs", "seismic", "geology", "natural-disasters"],
+  "capabilities": [
+    "earthquake",
+    "usgs",
+    "seismic",
+    "geology",
+    "natural-disasters"
+  ],
   "seeded": true,
   "seed_version": 1
 }

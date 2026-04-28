@@ -1,5 +1,5 @@
 {
-  "name": "seed/duckduckgo-instant",
+  "name": "seed-duckduckgo-instant",
   "description": "Get DuckDuckGo instant answers and abstracts for a search query.",
   "agent_type": "http",
   "category": "research",
@@ -12,7 +12,12 @@
     "no_html": "1"
   },
   "response_path": "Abstract",
-  "capabilities": ["search", "duckduckgo", "instant-answers", "web"],
+  "capabilities": [
+    "search",
+    "duckduckgo",
+    "instant-answers",
+    "web"
+  ],
   "seeded": true,
   "seed_version": 1
 }

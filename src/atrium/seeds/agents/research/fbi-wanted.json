@@ -1,5 +1,5 @@
 {
-  "name": "seed/fbi-wanted",
+  "name": "seed-fbi-wanted",
   "description": "Search the FBI Most Wanted list by name or title.",
   "agent_type": "http",
   "category": "research",
@@ -10,7 +10,12 @@
     "title": "{query}"
   },
   "response_path": "items",
-  "capabilities": ["fbi", "wanted", "law-enforcement", "search"],
+  "capabilities": [
+    "fbi",
+    "wanted",
+    "law-enforcement",
+    "search"
+  ],
   "seeded": true,
   "seed_version": 1
 }

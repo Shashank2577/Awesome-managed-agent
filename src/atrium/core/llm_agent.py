@@ -90,6 +90,16 @@ def create_agent_class(config: dict[str, Any]) -> type[Agent]:
                 logger.warning(
                     "LLM agent '%s' failed: %s", agent_name, exc, exc_info=True
                 )
+                exc_str = str(exc).lower()
+                if any(kw in exc_str for kw in ("api_key", "authentication", "auth_token", "apikey", "unauthorized", "401")):
+                    return {
+                        "response": "",
+                        "error": (
+                            "LLM authentication failed. Set ANTHROPIC_API_KEY, "
+                            "OPENAI_API_KEY, or GEMINI_API_KEY environment variable."
+                        ),
+                        "source": agent_name,
+                    }
                 return {
                     "response": "",
                     "error": str(exc),

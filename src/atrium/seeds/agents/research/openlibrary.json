@@ -1,5 +1,5 @@
 {
-  "name": "seed/openlibrary",
+  "name": "seed-openlibrary",
   "description": "Search Open Library for books by title, author, or subject.",
   "agent_type": "http",
   "category": "research",
@@ -11,7 +11,12 @@
     "limit": "10"
   },
   "response_path": "docs",
-  "capabilities": ["books", "library", "open-library", "search"],
+  "capabilities": [
+    "books",
+    "library",
+    "open-library",
+    "search"
+  ],
   "seeded": true,
   "seed_version": 1
 }

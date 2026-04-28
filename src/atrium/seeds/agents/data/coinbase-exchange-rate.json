@@ -1,5 +1,5 @@
 {
-  "name": "seed/coinbase-exchange-rate",
+  "name": "seed-coinbase-exchange-rate",
   "description": "Fetch current cryptocurrency exchange rates for a given currency code via Coinbase.",
   "agent_type": "http",
   "category": "data",
@@ -10,7 +10,13 @@
     "currency": "{query}"
   },
   "response_path": "data.rates",
-  "capabilities": ["crypto", "exchange-rates", "coinbase", "bitcoin", "finance"],
+  "capabilities": [
+    "crypto",
+    "exchange-rates",
+    "coinbase",
+    "bitcoin",
+    "finance"
+  ],
   "seeded": true,
   "seed_version": 1
 }

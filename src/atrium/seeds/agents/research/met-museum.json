@@ -1,5 +1,5 @@
 {
-  "name": "seed/met-museum",
+  "name": "seed-met-museum",
   "description": "Search the Metropolitan Museum of Art collection for artworks by keyword.",
   "agent_type": "http",
   "category": "research",
@@ -10,7 +10,13 @@
     "q": "{query}"
   },
   "response_path": "objectIDs",
-  "capabilities": ["art", "museum", "metropolitan", "collection", "search"],
+  "capabilities": [
+    "art",
+    "museum",
+    "metropolitan",
+    "collection",
+    "search"
+  ],
   "seeded": true,
   "seed_version": 1
 }

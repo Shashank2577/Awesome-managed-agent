@@ -1,5 +1,5 @@
 {
-  "name": "seed/ip-geolocation",
+  "name": "seed-ip-geolocation",
   "description": "Geolocate an IP address to get country, city, timezone, and network details.",
   "agent_type": "http",
   "category": "data",
@@ -8,7 +8,13 @@
   "headers": {},
   "query_params": {},
   "response_path": "",
-  "capabilities": ["ip", "geolocation", "network", "location", "timezone"],
+  "capabilities": [
+    "ip",
+    "geolocation",
+    "network",
+    "location",
+    "timezone"
+  ],
   "seeded": true,
   "seed_version": 1
 }

@@ -146,7 +146,14 @@ class Commander:
         try:
             raw: dict[str, Any] = await self._llm.generate_json(system_prompt, user_prompt)
         except Exception:
-            # Fallback: run all agents sequentially
+            # Fallback: only run all agents if registry is small (≤10).
+            # With a large registry, running every agent simultaneously is catastrophic.
+            if len(manifest) > 10:
+                raise RuntimeError(
+                    f"Planning failed — too many agents ({len(manifest)}) to run without a plan. "
+                    "Please check your LLM API key configuration "
+                    "(ANTHROPIC_API_KEY, OPENAI_API_KEY, or GEMINI_API_KEY)."
+                )
             return Plan(
                 thread_id="",
                 rationale="LLM planning failed, running all agents.",
@@ -154,6 +161,13 @@ class Commander:
             )
 
         if not isinstance(raw, dict):
+            if len(manifest) > 10:
+                raise RuntimeError(
+                    f"Planning failed (LLM returned invalid response) — too many agents "
+                    f"({len(manifest)}) to run without a plan. "
+                    "Please check your LLM API key configuration "
+                    "(ANTHROPIC_API_KEY, OPENAI_API_KEY, or GEMINI_API_KEY)."
+                )
             return Plan(
                 thread_id="",
                 rationale="LLM returned non-dict, running all agents.",

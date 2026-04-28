@@ -1,5 +1,5 @@
 {
-  "name": "seed/rest-countries",
+  "name": "seed-rest-countries",
   "description": "Look up detailed information about a country by name using the REST Countries API.",
   "agent_type": "http",
   "category": "data",
@@ -8,7 +8,13 @@
   "headers": {},
   "query_params": {},
   "response_path": "",
-  "capabilities": ["countries", "geography", "flags", "population", "currency"],
+  "capabilities": [
+    "countries",
+    "geography",
+    "flags",
+    "population",
+    "currency"
+  ],
   "seeded": true,
   "seed_version": 1
 }

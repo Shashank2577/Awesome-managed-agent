@@ -1,5 +1,5 @@
 {
-  "name": "seed/product",
+  "name": "seed-product",
   "description": "Product Vision",
   "agent_type": "llm",
   "category": "communication",

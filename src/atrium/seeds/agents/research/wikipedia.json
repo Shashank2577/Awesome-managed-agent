@@ -1,5 +1,5 @@
 {
-  "name": "seed/wikipedia",
+  "name": "seed-wikipedia",
   "description": "Fetch the summary of a Wikipedia article by topic or title.",
   "agent_type": "http",
   "category": "research",
@@ -8,7 +8,12 @@
   "headers": {},
   "query_params": {},
   "response_path": "extract",
-  "capabilities": ["wikipedia", "encyclopedia", "facts", "lookup"],
+  "capabilities": [
+    "wikipedia",
+    "encyclopedia",
+    "facts",
+    "lookup"
+  ],
   "seeded": true,
   "seed_version": 1
 }

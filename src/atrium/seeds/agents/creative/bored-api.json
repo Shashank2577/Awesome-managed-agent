@@ -1,5 +1,5 @@
 {
-  "name": "seed/bored-api",
+  "name": "seed-bored-api",
   "description": "Get a random activity suggestion to beat boredom from the Bored API.",
   "agent_type": "http",
   "category": "creative",
@@ -8,7 +8,13 @@
   "headers": {},
   "query_params": {},
   "response_path": "",
-  "capabilities": ["activity", "boredom", "suggestions", "fun", "ideas"],
+  "capabilities": [
+    "activity",
+    "boredom",
+    "suggestions",
+    "fun",
+    "ideas"
+  ],
   "seeded": true,
   "seed_version": 1
 }

@@ -1,5 +1,5 @@
 {
-  "name": "seed/openalex-works",
+  "name": "seed-openalex-works",
   "description": "Search academic works (papers, books, datasets) across OpenAlex's open scholarly graph.",
   "agent_type": "http",
   "category": "research",
@@ -11,7 +11,13 @@
     "per-page": "10"
   },
   "response_path": "results",
-  "capabilities": ["academic", "papers", "openalex", "scholarly", "research"],
+  "capabilities": [
+    "academic",
+    "papers",
+    "openalex",
+    "scholarly",
+    "research"
+  ],
   "seeded": true,
   "seed_version": 1
 }

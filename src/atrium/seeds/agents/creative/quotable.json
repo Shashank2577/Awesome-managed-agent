@@ -1,5 +1,5 @@
 {
-  "name": "seed/quotable",
+  "name": "seed-quotable",
   "description": "Search for inspirational quotes by keyword, author, or theme using the Quotable API.",
   "agent_type": "http",
   "category": "creative",
@@ -11,7 +11,12 @@
     "limit": "5"
   },
   "response_path": "results",
-  "capabilities": ["quotes", "inspiration", "motivation", "authors"],
+  "capabilities": [
+    "quotes",
+    "inspiration",
+    "motivation",
+    "authors"
+  ],
   "seeded": true,
   "seed_version": 1
 }
