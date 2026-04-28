@@ -35,6 +35,8 @@ Return ONLY valid JSON in exactly this shape:
 
 Rules:
 - Only use agent names that appear in the manifest.
+- EACH AGENT CAN ONLY APPEAR ONCE in the plan. Never use the same agent name twice.
+  If you need similar work done for different inputs, use ONE agent and pass all inputs together.
 - depends_on must list agent names that must complete before this step runs.
 - CRITICAL: If agent B needs data produced by agent A, agent B MUST list agent A in depends_on.
   For example, a summarizer that summarizes search results MUST depend on the search agent.
@@ -160,12 +162,16 @@ class Commander:
 
         known_agents: set[str] = {entry["name"] for entry in manifest}
 
-        # Validate and filter steps
+        # Validate and filter steps (no duplicate agent names)
         valid_steps: list[PlanStep] = []
+        seen_agents: set[str] = set()
         for step_data in raw.get("steps", []):
             agent_name = step_data.get("agent", "")
             if agent_name not in known_agents:
                 continue
+            if agent_name in seen_agents:
+                continue  # Skip duplicates — each agent can only appear once
+            seen_agents.add(agent_name)
             # Filter unknown names from depends_on
             clean_depends = [
                 dep for dep in step_data.get("depends_on", [])

@@ -314,12 +314,18 @@ class ThreadOrchestrator:
 
             # Phase 5: Finalize
             await self._recorder.emit(tid, "PLAN_COMPLETED", {"plan_id": plan.plan_id})
+
+            # Build summary fallback from sections if empty
+            summary = decision.summary
+            if not summary and decision.sections:
+                summary = decision.sections[0].get("content", "")[:300]
+
             await self._recorder.emit(
                 tid,
                 "EVIDENCE_PUBLISHED",
                 {
-                    "headline": decision.headline or decision.summary[:60] or "Analysis Complete",
-                    "summary": decision.summary,
+                    "headline": decision.headline or summary[:60] or "Analysis Complete",
+                    "summary": summary,
                     "sections": decision.sections,
                     "recommendations": decision.recommendations,
                 },
