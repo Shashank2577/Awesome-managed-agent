@@ -1,0 +1,18 @@
+{
+  "name": "seed/weather-open-meteo",
+  "description": "Fetch current weather conditions for a fixed location using the Open-Meteo API (no API key required).",
+  "agent_type": "http",
+  "category": "data",
+  "api_url": "https://api.open-meteo.com/v1/forecast",
+  "method": "GET",
+  "headers": {},
+  "query_params": {
+    "latitude": "40.7",
+    "longitude": "-74.0",
+    "current_weather": "true"
+  },
+  "response_path": "current_weather",
+  "capabilities": ["weather", "forecast", "temperature", "open-meteo"],
+  "seeded": true,
+  "seed_version": 1
+}

@@ -1,0 +1,17 @@
+{
+  "name": "seed/spaceflight-news",
+  "description": "Search recent space and rocketry news articles from the Spaceflight News API.",
+  "agent_type": "http",
+  "category": "research",
+  "api_url": "https://api.spaceflightnewsapi.net/v4/articles/",
+  "method": "GET",
+  "headers": {},
+  "query_params": {
+    "title_contains": "{query}",
+    "limit": "10"
+  },
+  "response_path": "results",
+  "capabilities": ["space", "rockets", "news", "nasa", "spaceflight"],
+  "seeded": true,
+  "seed_version": 1
+}

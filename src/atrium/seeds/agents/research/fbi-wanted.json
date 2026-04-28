@@ -1,0 +1,16 @@
+{
+  "name": "seed/fbi-wanted",
+  "description": "Search the FBI Most Wanted list by name or title.",
+  "agent_type": "http",
+  "category": "research",
+  "api_url": "https://api.fbi.gov/@wanted",
+  "method": "GET",
+  "headers": {},
+  "query_params": {
+    "title": "{query}"
+  },
+  "response_path": "items",
+  "capabilities": ["fbi", "wanted", "law-enforcement", "search"],
+  "seeded": true,
+  "seed_version": 1
+}

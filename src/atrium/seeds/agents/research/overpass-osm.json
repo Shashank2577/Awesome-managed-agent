@@ -1,0 +1,18 @@
+{
+  "name": "seed/overpass-osm",
+  "description": "Search OpenStreetMap for places, addresses, and geographic features via the Nominatim API.",
+  "agent_type": "http",
+  "category": "research",
+  "api_url": "https://nominatim.openstreetmap.org/search",
+  "method": "GET",
+  "headers": {},
+  "query_params": {
+    "q": "{query}",
+    "format": "json",
+    "limit": "5"
+  },
+  "response_path": "",
+  "capabilities": ["openstreetmap", "geocoding", "places", "maps", "location"],
+  "seeded": true,
+  "seed_version": 1
+}

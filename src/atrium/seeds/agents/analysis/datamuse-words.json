@@ -1,0 +1,17 @@
+{
+  "name": "seed/datamuse-words",
+  "description": "Find words related in meaning, rhyme, or context to a given word using the Datamuse API.",
+  "agent_type": "http",
+  "category": "analysis",
+  "api_url": "https://api.datamuse.com/words",
+  "method": "GET",
+  "headers": {},
+  "query_params": {
+    "ml": "{query}",
+    "max": "20"
+  },
+  "response_path": "",
+  "capabilities": ["words", "rhyme", "synonyms", "language", "linguistics"],
+  "seeded": true,
+  "seed_version": 1
+}

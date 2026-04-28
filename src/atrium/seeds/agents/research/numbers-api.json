@@ -1,0 +1,14 @@
+{
+  "name": "seed/numbers-api",
+  "description": "Get an interesting mathematical fact about a number from the Numbers API.",
+  "agent_type": "http",
+  "category": "research",
+  "api_url": "http://numbersapi.com/{query}/math",
+  "method": "GET",
+  "headers": {},
+  "query_params": {},
+  "response_path": "",
+  "capabilities": ["numbers", "math", "facts", "trivia"],
+  "seeded": true,
+  "seed_version": 1
+}

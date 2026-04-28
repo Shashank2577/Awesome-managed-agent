@@ -1,0 +1,16 @@
+{
+  "name": "seed/joke-api",
+  "description": "Fetch a joke from the JokeAPI, optionally filtered by keyword.",
+  "agent_type": "http",
+  "category": "creative",
+  "api_url": "https://v2.jokeapi.dev/joke/Any",
+  "method": "GET",
+  "headers": {},
+  "query_params": {
+    "contains": "{query}"
+  },
+  "response_path": "",
+  "capabilities": ["jokes", "humor", "comedy", "fun"],
+  "seeded": true,
+  "seed_version": 1
+}

@@ -1,0 +1,14 @@
+{
+  "name": "seed/bored-api",
+  "description": "Get a random activity suggestion to beat boredom from the Bored API.",
+  "agent_type": "http",
+  "category": "creative",
+  "api_url": "https://bored-api.appbrewery.com/random",
+  "method": "GET",
+  "headers": {},
+  "query_params": {},
+  "response_path": "",
+  "capabilities": ["activity", "boredom", "suggestions", "fun", "ideas"],
+  "seeded": true,
+  "seed_version": 1
+}
