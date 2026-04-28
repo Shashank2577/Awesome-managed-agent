@@ -11,8 +11,11 @@ services:
       ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"  # optional — powers direct_anthropic runtime
       OPENAI_API_KEY: "${OPENAI_API_KEY:-}"         # optional — powers open_agent_sdk runtime
       GEMINI_MODEL: "${GEMINI_MODEL:-gemini-2.5-flash}"
+      ATRIUM_SANDBOX_BACKEND: "docker"
+      ATRIUM_SANDBOX_REGISTRY: "${ATRIUM_SANDBOX_REGISTRY:-atrium}"
     volumes:
       - atrium_data:/app/data
+      - /var/run/docker.sock:/var/run/docker.sock
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8080/api/v1/health"]
       interval: 10s

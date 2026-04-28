@@ -278,6 +278,10 @@ async def create_session(
         asyncio.create_task(
             _run_gemini_session(session.session_id, workspace.workspace_id, req.objective, state)
         )
+    elif req.runtime in ("direct_anthropic", "open_agent_sdk", "openclaude"):
+        asyncio.create_task(
+            _run_harness_session(session, workspace.workspace_id, req.objective, req.runtime, req.model_override or req.model, state)
+        )
 
     return _sess_response(session)
 
@@ -360,6 +364,103 @@ async def _run_gemini_session(
         if sess_store:
             try:
                 await sess_store.set_status(workspace_id, session_id, SessionStatus.FAILED)
+            except Exception:
+                pass
+
+
+async def _run_harness_session(
+    session: "Session",
+    workspace_id: str,
+    objective: str,
+    runtime_name: str,
+    model: str,
+    state: "AppState",
+) -> None:
+    """Drive a real sandbox session via DockerSandboxRunner + BridgeStream."""
+    import os
+    from atrium.harness.bridge import BridgeStream, GuardrailEnforcer
+    from atrium.harness.sandbox import DockerSandboxRunner, InMemorySandboxRunner, ResourceLimits, NetworkPolicy
+    from atrium.core.artifact_store import ArtifactStore
+
+    rec = state.recorder
+    sess_store = state.session_store
+
+    _runtime_map = {
+        "direct_anthropic": "atrium.harness.runtimes.direct_anthropic:DirectAnthropicRuntime",
+        "open_agent_sdk": "atrium.harness.runtimes.open_agent_sdk:OpenAgentSDKRuntime",
+        "openclaude": "atrium.harness.runtimes.openclaude:OpenClaudeRuntime",
+    }
+
+    async def emit(t: str, p: dict) -> None:
+        await rec.emit(session.session_id, t, p)
+
+    try:
+        # Resolve runtime class
+        mod_path, cls_name = _runtime_map[runtime_name].split(":")
+        import importlib
+        mod = importlib.import_module(mod_path)
+        runtime = getattr(mod, cls_name)()
+
+        # Collect required env vars
+        env: dict[str, str] = {}
+        for env_key in runtime.required_env(model):
+            val = os.environ.get(env_key, "")
+            if val:
+                env[env_key] = val
+
+        # Pick backend (docker or kubernetes based on env)
+        backend = os.getenv("ATRIUM_SANDBOX_BACKEND", "docker")
+        if backend == "kubernetes":
+            from atrium.harness.sandbox import KubernetesSandboxRunner
+            runner_cls = KubernetesSandboxRunner
+        else:
+            try:
+                import aiodocker  # noqa: F401
+                runner_cls = DockerSandboxRunner
+            except ImportError:
+                runner_cls = InMemorySandboxRunner
+
+        limits = ResourceLimits()
+        policy = NetworkPolicy(allow_egress=[runtime.model_endpoint(model)])
+
+        # Transition to RUNNING
+        if sess_store:
+            await sess_store.set_status(workspace_id, session.session_id, SessionStatus.RUNNING)
+        await emit("THREAD_RUNNING", {})
+
+        sandbox = await runner_cls.start(
+            session=session,
+            runtime=runtime,
+            model=model,
+            env=env,
+            limits=limits,
+            network_policy=policy,
+        )
+
+        if sess_store:
+            await sess_store.set_container_id(workspace_id, session.session_id, sandbox.container_id)
+
+        artifact_store = ArtifactStore(":memory:")
+        await artifact_store.open()
+        guardrails = GuardrailEnforcer(max_tool_calls=200)
+        bridge = BridgeStream(sandbox, session, rec, artifact_store, guardrails)
+
+        try:
+            result = await asyncio.wait_for(bridge.run(objective), timeout=1800)
+            await emit("THREAD_COMPLETED", {
+                "final_message": result.final_message,
+                "cost_usd": result.cost_usd,
+            })
+            if sess_store:
+                await sess_store.set_status(workspace_id, session.session_id, SessionStatus.COMPLETED)
+        finally:
+            await sandbox.stop()
+
+    except Exception as exc:
+        await emit("THREAD_FAILED", {"error": str(exc)})
+        if sess_store:
+            try:
+                await sess_store.set_status(workspace_id, session.session_id, SessionStatus.FAILED)
             except Exception:
                 pass
 
