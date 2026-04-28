@@ -269,14 +269,97 @@ async def create_session(
         },
     )
 
-    # For the echo runtime, simulate a complete execution so the UI is demonstrable
-    # without needing the Docker sandbox orchestrator running.
+    # Runtimes that run server-side without Docker
     if req.runtime == "echo":
         asyncio.create_task(
             _run_echo_simulation(session.session_id, workspace.workspace_id, req.objective, state)
         )
+    elif req.runtime in ("direct_gemini", "gemini"):
+        asyncio.create_task(
+            _run_gemini_session(session.session_id, workspace.workspace_id, req.objective, state)
+        )
 
     return _sess_response(session)
+
+
+async def _run_gemini_session(
+    session_id: str, workspace_id: str, objective: str, state: "AppState"
+) -> None:
+    """Run a real Gemini session server-side — no Docker required.
+
+    Uses LLMClient with the gemini provider (GEMINI_API_KEY must be set).
+    Emits the same event sequence the UI expects so streaming works live.
+    """
+    import os
+    from atrium.engine.llm import LLMClient
+
+    rec = state.recorder
+    sess_store = state.session_store
+
+    async def emit(t: str, p: dict) -> None:
+        await rec.emit(session_id, t, p)
+
+    model = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+
+    try:
+        await asyncio.sleep(0.3)
+        await emit("THREAD_PLANNING_STARTED", {})
+
+        plan_id = str(uuid4())
+        await asyncio.sleep(0.5)
+        await emit("PLAN_CREATED", {
+            "plan_id": plan_id,
+            "plan_number": 1,
+            "rationale": f"Calling Gemini ({model}) for: {objective[:120]}",
+            "graph": {"nodes": [
+                {"key": "gemini", "role": "gemini-agent",
+                 "objective": objective[:80], "depends_on": []}
+            ]},
+        })
+        await emit("THREAD_RUNNING", {})
+        await emit("AGENT_HIRED", {
+            "agent_key": "gemini", "role": f"gemini/{model}",
+            "objective": objective[:80], "depends_on": [],
+        })
+        await emit("AGENT_RUNNING", {"agent_key": "gemini"})
+
+        llm = LLMClient(f"gemini:{model}")
+        system_prompt = (
+            "You are a capable AI assistant running inside the Atrium agent platform. "
+            "Respond clearly and helpfully to the user's objective. "
+            "Structure your answer with a concise summary followed by detailed content."
+        )
+        response_text = await llm.generate_text(system_prompt, f"Objective: {objective}")
+
+        preview = response_text[:180] + ("…" if len(response_text) > 180 else "")
+        await emit("AGENT_MESSAGE", {"agent_key": "gemini", "text": preview})
+        await emit("AGENT_OUTPUT", {"agent_key": "gemini", "output": {"text": response_text}})
+        await emit("AGENT_COMPLETED", {"agent_key": "gemini"})
+        await asyncio.sleep(0.2)
+        await emit("EVIDENCE_PUBLISHED", {
+            "headline": f"Gemini ({model}) Response",
+            "summary": response_text[:400],
+            "sections": [{
+                "title": "Full Response",
+                "content": response_text,
+                "key_facts": [
+                    f"Model: gemini:{model}",
+                    f"Objective: {objective[:80]}",
+                    "Executed server-side — no sandbox container needed",
+                ],
+            }],
+        })
+        await emit("THREAD_COMPLETED", {})
+        if sess_store:
+            await sess_store.set_status(workspace_id, session_id, SessionStatus.COMPLETED)
+
+    except Exception as exc:
+        await emit("THREAD_FAILED", {"error": str(exc)})
+        if sess_store:
+            try:
+                await sess_store.set_status(workspace_id, session_id, SessionStatus.FAILED)
+            except Exception:
+                pass
 
 
 async def _run_echo_simulation(

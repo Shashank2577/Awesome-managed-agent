@@ -9,9 +9,10 @@ services:
       - "8080:8080"
     environment:
       ATRIUM_DEV_MODE: "true"
-      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"
-      GEMINI_API_KEY: "${GEMINI_API_KEY:-}"
-      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"
+      GEMINI_API_KEY: "${GEMINI_API_KEY:-}"        # primary — powers direct_gemini runtime
+      ANTHROPIC_API_KEY: "${ANTHROPIC_API_KEY:-}"  # optional — powers direct_anthropic runtime
+      OPENAI_API_KEY: "${OPENAI_API_KEY:-}"         # optional — powers open_agent_sdk runtime
+      GEMINI_MODEL: "${GEMINI_MODEL:-gemini-2.5-flash}"
     volumes:
       - atrium_data:/app/data
     healthcheck:

@@ -1221,6 +1221,7 @@ section.block {
 }
 
 .runtime-badge.echo      { background: rgba(95,255,208,0.12); color: #5fffd0; border: 1px solid rgba(95,255,208,0.25); }
+.runtime-badge.gemini    { background: rgba(66,200,100,0.14); color: #4cc86a; border: 1px solid rgba(66,200,100,0.28); }
 .runtime-badge.anthropic { background: rgba(124,92,255,0.15); color: #a387ff; border: 1px solid rgba(124,92,255,0.3); }
 .runtime-badge.openai    { background: rgba(41,192,255,0.12); color: #29c0ff; border: 1px solid rgba(41,192,255,0.25); }
 

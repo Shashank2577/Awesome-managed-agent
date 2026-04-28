@@ -52,6 +52,7 @@ async function api(path, init = {}) {
 
 const RUNTIME_MODELS = {
   echo: "echo:test",
+  direct_gemini: "gemini:gemini-2.5-flash",
   direct_anthropic: "anthropic:claude-haiku-4-5-20251001",
   open_agent_sdk: "openai:gpt-4o-mini",
   openclaude: "anthropic:claude-sonnet-4-6",
@@ -59,6 +60,7 @@ const RUNTIME_MODELS = {
 
 const RUNTIME_HINTS = {
   echo: "No API key needed — simulates a full agent run",
+  direct_gemini: "Calls Gemini server-side — requires GEMINI_API_KEY in server env",
   direct_anthropic: "Requires ANTHROPIC_API_KEY in server env",
   open_agent_sdk: "Requires OPENAI_API_KEY + running sandbox",
   openclaude: "Requires ANTHROPIC_API_KEY + running sandbox",

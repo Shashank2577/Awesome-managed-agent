@@ -115,6 +115,10 @@
                   <span class="runtime-guide-desc">Demo mode — no API key needed. Simulates a full agent run with live streaming.</span>
                 </div>
                 <div class="runtime-guide-row">
+                  <span class="runtime-badge gemini">direct_gemini</span>
+                  <span class="runtime-guide-desc">Real Gemini 2.5 Flash calls, server-side. Set <code>GEMINI_API_KEY</code> — no sandbox needed.</span>
+                </div>
+                <div class="runtime-guide-row">
                   <span class="runtime-badge anthropic">direct_anthropic</span>
                   <span class="runtime-guide-desc">Real Claude agents via Anthropic SDK. Requires <code>ANTHROPIC_API_KEY</code>.</span>
                 </div>
@@ -134,6 +138,7 @@
             <label class="runtime-label">Runtime</label>
             <select id="runtimeSelect" class="runtime-select">
               <option value="echo">echo — demo (no API key)</option>
+              <option value="direct_gemini">direct_gemini — Gemini 2.5 Flash</option>
               <option value="direct_anthropic">direct_anthropic — Claude</option>
               <option value="open_agent_sdk">open_agent_sdk — OpenAI</option>
               <option value="openclaude">openclaude — Claude Code</option>
