@@ -55,6 +55,57 @@ def cmd_agents_list(args):
         print(f"  {a.name:20s} {a.description}")
 
 
+def cmd_agents_seed(args):
+    """Seed agents from the built-in corpus (or a custom source directory)."""
+    from atrium.core.agent_store import AgentStore
+    from atrium.seeds import iter_seeds
+
+    db_path = getattr(args, "db", "atrium_agents.db")
+    store = AgentStore(db_path=db_path)
+
+    source = getattr(args, "source", None)
+    category_filter = getattr(args, "category", None)
+    force = getattr(args, "force", False)
+
+    seeds = iter_seeds(source=source)
+    if category_filter:
+        seeds = (s for s in seeds if s.get("category") == category_filter)
+
+    if not force:
+        # Default path: skip existing agents via seed_if_empty
+        count = store.seed_if_empty(seeds)
+        if count:
+            print(f"Seeded {count} agent(s).")
+        else:
+            print("Store already populated — nothing seeded (use --force to overwrite).")
+        return
+
+    # --force: upsert every seed regardless of current store contents
+    from atrium.api.routes.agent_builder import CreateAgentRequest
+    from pydantic import ValidationError
+
+    created = skipped = failed = 0
+    for raw in seeds:
+        name = raw.get("name", "<unknown>")
+        try:
+            req = CreateAgentRequest.model_validate(raw)
+        except (ValidationError, Exception) as exc:
+            print(f"  SKIP (invalid) {name}: {exc}")
+            failed += 1
+            continue
+
+        existing = store.load(name)
+        store.save(req.model_dump())
+        if existing:
+            print(f"  REPLACE {name}")
+            skipped += 1  # counted as replaced/skipped
+        else:
+            print(f"  CREATE  {name}")
+            created += 1
+
+    print(f"\nDone — created: {created}, replaced: {skipped}, invalid: {failed}")
+
+
 def cmd_new_agent(args):
     name = args.name
     class_name = "".join(word.capitalize() for word in name.split("_")) + "Agent"
@@ -137,11 +188,33 @@ def main():
     run_p.add_argument("name", help="Example name (hello_world, observe)")
     run_p.set_defaults(func=cmd_example_run)
 
-    # agents list
+    # agents list / seed
     agents_p = sub.add_parser("agents", help="Agent operations")
     agents_sub = agents_p.add_subparsers(dest="agents_action")
+
     list_p = agents_sub.add_parser("list", help="List available agents")
     list_p.set_defaults(func=cmd_agents_list)
+
+    seed_p = agents_sub.add_parser("seed", help="Seed agents from the built-in corpus")
+    seed_p.add_argument(
+        "--force",
+        action="store_true",
+        default=False,
+        help="Replace existing agents (upsert); default is skip-if-exists",
+    )
+    seed_p.add_argument(
+        "--category",
+        default=None,
+        metavar="CAT",
+        help="Only seed agents whose category matches CAT",
+    )
+    seed_p.add_argument(
+        "--source",
+        default=None,
+        metavar="PATH",
+        help="Load seed JSON files from PATH instead of the built-in corpus",
+    )
+    seed_p.set_defaults(func=cmd_agents_seed)
 
     args = parser.parse_args()
     if hasattr(args, "func"):

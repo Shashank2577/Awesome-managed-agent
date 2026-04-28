@@ -55,6 +55,25 @@ class CreateAgentRequest(BaseModel):
 
 
 # ------------------------------------------------------------------
+# Bulk import schemas
+# ------------------------------------------------------------------
+
+class BulkCreateRequest(BaseModel):
+    agents: list[CreateAgentRequest] = []
+    mode: Literal["skip", "replace"] = "skip"
+
+
+class BulkItemResult(BaseModel):
+    name: str
+    status: Literal["created", "skipped", "error"]
+    detail: str = ""
+
+
+class BulkCreateResponse(BaseModel):
+    results: list[BulkItemResult]
+
+
+# ------------------------------------------------------------------
 # Endpoints
 # ------------------------------------------------------------------
 
@@ -96,6 +115,64 @@ async def create_agent(req: CreateAgentRequest) -> dict:
         "status": "registered",
         "message": f"Agent '{req.name}' created and ready for Commander",
     }
+
+
+@router.post("/agents/bulk", status_code=200)
+async def bulk_create_agents(req: BulkCreateRequest) -> BulkCreateResponse:
+    """Bulk-import a list of agents.
+
+    Each item in the request is processed independently; a failure on one
+    agent never aborts the rest of the batch.
+
+    ``mode="skip"`` (default) — existing agents are left untouched and
+    reported as ``"skipped"``.
+
+    ``mode="replace"`` — existing agents are deleted from registry and store
+    before re-creation (upsert semantics).
+    """
+    from atrium.api.app import get_registry, get_agent_store
+    from atrium.core import agent_factory
+
+    registry = get_registry()
+    store = get_agent_store()
+
+    if registry is None or store is None:
+        raise HTTPException(500, "Server not fully initialized")
+
+    results: list[BulkItemResult] = []
+
+    for agent_req in req.agents:
+        name = agent_req.name
+        existing = False
+        try:
+            registry.get(name)
+            existing = True
+        except KeyError:
+            pass
+
+        if existing:
+            if req.mode == "skip":
+                results.append(BulkItemResult(name=name, status="skipped", detail="already exists"))
+                continue
+            # mode == "replace": remove first, then re-create below
+            try:
+                store.delete(name)
+                registry.remove(name)
+            except Exception as exc:  # noqa: BLE001
+                results.append(BulkItemResult(name=name, status="error", detail=f"delete failed: {exc}"))
+                continue
+
+        # Create and register
+        try:
+            config = agent_req.model_dump()
+            agent_cls = agent_factory.build_agent_class(config)
+            registry.register(agent_cls)
+            store.save(config)
+            results.append(BulkItemResult(name=name, status="created"))
+        except Exception as exc:  # noqa: BLE001
+            results.append(BulkItemResult(name=name, status="error", detail=str(exc)))
+
+    return BulkCreateResponse(results=results)
 
 
 @router.get("/agents/{name}/config")

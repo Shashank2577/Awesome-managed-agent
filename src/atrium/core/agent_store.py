@@ -3,7 +3,11 @@
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
+from typing import Iterable
+
+logger = logging.getLogger(__name__)
 
 
 class AgentStore:
@@ -89,3 +93,40 @@ class AgentStore:
         )
         row = cursor.fetchone()
         return json.loads(row[0]) if row else None
+
+    # ------------------------------------------------------------------
+    # Seeding
+    # ------------------------------------------------------------------
+
+    def seed_if_empty(self, seeds: Iterable[dict]) -> int:
+        """Populate the store from *seeds* if — and only if — it is empty.
+
+        Preserves any user customisations: if even one agent already exists in
+        the store the method is a no-op and returns 0.
+
+        Each seed dict is validated against ``CreateAgentRequest``.  Invalid
+        seeds are logged and skipped; the method never raises.
+
+        Args:
+            seeds: Iterable of agent config dicts (e.g. from ``iter_seeds()``).
+
+        Returns:
+            Number of seeds successfully saved.
+        """
+        # Lazy import to avoid circular dependency: agent_store (core) ->
+        # CreateAgentRequest (api).
+        from atrium.api.routes.agent_builder import CreateAgentRequest  # noqa: PLC0415
+
+        if self.count() > 0:
+            return 0
+
+        saved = 0
+        for raw in seeds:
+            try:
+                req = CreateAgentRequest.model_validate(raw)
+                self.save(req.model_dump())
+                saved += 1
+            except Exception as exc:  # noqa: BLE001
+                logger.warning("Skipping invalid seed %r: %s", raw.get("name", "<unknown>"), exc)
+
+        return saved
