@@ -447,28 +447,13 @@ async def stream_session(
         raise HTTPException(404, "Session not found")
 
     async def event_generator():
-        queue: asyncio.Queue = asyncio.Queue()
-        # Subscribe before replay to avoid missing events emitted between the two
-        await state.recorder.subscribe(session_id, queue)
-        replayed_seq = 0
         try:
-            # Replay history so clients catch up immediately on reconnect
-            for evt in state.recorder.replay(session_id):
-                yield format_sse(evt)
-                replayed_seq = evt.sequence
-
-            while True:
+            async for evt in state.recorder.subscribe(session_id):
                 if await request.is_disconnected():
                     break
-                try:
-                    event = await asyncio.wait_for(queue.get(), timeout=_SSE_HEARTBEAT)
-                    # Skip events already sent via replay
-                    if event.sequence > replayed_seq:
-                        yield format_sse(event)
-                except asyncio.TimeoutError:
-                    yield ": heartbeat\n\n"
-        finally:
-            await state.recorder.unsubscribe(session_id, queue)
+                yield format_sse(evt)
+        except Exception:
+            pass
         yield format_sse_end()
 
     return StreamingResponse(
