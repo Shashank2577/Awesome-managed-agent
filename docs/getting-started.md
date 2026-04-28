@@ -5,10 +5,16 @@ Get Atrium running in under 5 minutes.
 ## 1. Install
 
 ```bash
-pip install atrium
+pip install -e ".[all]"
 ```
 
-Atrium requires Python 3.11+ and an OpenAI API key for the Commander (the LLM planner that orchestrates your agents).
+Set any one LLM API key — Atrium auto-detects:
+
+```bash
+export GEMINI_API_KEY="your-key"     # Google Gemini
+# OR: export OPENAI_API_KEY="your-key"   # OpenAI
+# OR: export ANTHROPIC_API_KEY="your-key" # Anthropic
+```
 
 ## 2. Run the Example
 
@@ -18,66 +24,80 @@ python -m atrium.examples.hello_world.app
 
 Open [http://localhost:8080](http://localhost:8080).
 
-You'll see the dashboard with three registered agents: `wiki_search`, `summarizer`, and `fact_checker`. Type an objective like "What is quantum computing?" and watch the Commander plan, the agents execute, and results stream in real-time.
+You'll see the dashboard with three registered agents. Type "What is quantum computing?" and watch the Commander plan, agents execute, and results stream in real-time.
 
-No external dependencies beyond an OpenAI key — the hello world example uses Wikipedia's public API.
+## 3. Create an Agent from the Dashboard (no code)
 
-## 3. Build Your First Agent
+Click **+ Create Agent** in the top nav. Fill in:
 
-Scaffold a new project:
+| Field | Value |
+|---|---|
+| Name | `weather` |
+| Description | `Fetches current weather for a city` |
+| Capabilities | `weather, forecast` |
+| API URL | `https://wttr.in/{query}?format=j1` |
+| Method | `GET` |
+
+Click **Create Agent**. It's immediately registered — the Commander will use it next time someone asks about weather.
+
+### Managing Agents
+
+The left sidebar shows all registered agents. Click any agent to:
+- **View** its full configuration (API URL, headers, params)
+- **Edit** — opens the create form pre-filled with current values
+- **Delete** — removes from both the registry and storage
+
+Agents persist to SQLite. Restart the server — they're still there.
+
+## 4. Or Build in Python (full control)
 
 ```bash
-mkdir my_project && cd my_project
-atrium new agent my_agent
+atrium new agent price_checker
 ```
 
-This creates `agents/my_agent.py` with a working stub and `tests/test_my_agent.py` with a test scaffold.
-
-Open `agents/my_agent.py` and fill in the three things that matter:
+Edit `agents/price_checker.py`:
 
 ```python
 from atrium import Agent
 
-class MyAgent(Agent):
-    name = "my_agent"
-    description = "Fetches the current weather for a city"  # Tell the Commander what you do
-    capabilities = ["weather", "data_lookup"]               # Tags for capability matching
+class PriceCheckerAgent(Agent):
+    name = "price_checker"
+    description = "Looks up product prices from an online catalog"
+    capabilities = ["pricing", "products"]
 
     async def run(self, input_data: dict) -> dict:
-        city = input_data.get("city", "London")
-        await self.say(f"Fetching weather for {city}...")
-        # Your logic here
-        return {"city": city, "temperature": 22, "condition": "sunny"}
+        query = input_data.get("query", "laptop")
+        await self.say(f"Looking up prices for {query}...")
+        # Your logic here — call APIs, use LLMs, anything
+        return {"product": query, "price": 999.99}
 ```
 
-Register it in `app.py`:
+Register in `app.py`:
 
 ```python
 from atrium import Atrium
-from agents.my_agent import MyAgent
+from agents.price_checker import PriceCheckerAgent
 
-app = Atrium(
-    agents=[MyAgent],
-    llm="openai:gpt-4o-mini",
-)
+app = Atrium(agents=[PriceCheckerAgent])
 
 if __name__ == "__main__":
     app.serve()
 ```
 
-## 4. Run
+Run: `python app.py` — open http://localhost:8080.
+
+## 5. Docker
 
 ```bash
-python app.py
+docker build -t atrium .
+docker run -p 8080:8080 -e GEMINI_API_KEY=your-key atrium atrium example run hello_world
 ```
-
-Open [http://localhost:8080](http://localhost:8080). Your agent appears in the dashboard. Submit an objective that involves weather — the Commander will plan a thread using your agent.
 
 ---
 
 ## Next Steps
 
-- **[Concepts](guide/concepts.md)** — understand what a Thread, Plan, Commander, and Pivot are
+- **[Concepts](guide/concepts.md)** — understand Threads, Plans, Commander, Pivots
 - **[Writing Agents](guide/writing-agents.md)** — the complete guide to building agents
-- **[Agent Patterns](guide/agent-patterns.md)** — cookbook with 5 common patterns and full code
-- **[Testing Agents](guide/testing-agents.md)** — test agents in isolation without a running server
+- **[Agent Patterns](guide/agent-patterns.md)** — cookbook with 5 common patterns
+- **[Testing Agents](guide/testing-agents.md)** — test agents without a running server
