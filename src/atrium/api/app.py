@@ -10,7 +10,10 @@ from fastapi.staticfiles import StaticFiles
 
 from atrium.api.middleware import setup_middleware
 from atrium.api.routes import health, threads, control, registry as registry_router
+from atrium.api.routes import agent_builder
+from atrium.core.agent_store import AgentStore
 from atrium.core.guardrails import GuardrailsConfig
+from atrium.core.http_agent import create_agent_class
 from atrium.core.registry import AgentRegistry
 from atrium.engine.orchestrator import ThreadOrchestrator
 from atrium.streaming.events import EventRecorder
@@ -22,6 +25,7 @@ from atrium.streaming.events import EventRecorder
 _registry: Optional[AgentRegistry] = None
 _recorder: Optional[EventRecorder] = None
 _orchestrator: Optional[ThreadOrchestrator] = None
+_agent_store: Optional[AgentStore] = None
 
 
 def get_registry() -> Optional[AgentRegistry]:
@@ -34,6 +38,10 @@ def get_recorder() -> Optional[EventRecorder]:
 
 def get_orchestrator() -> Optional[ThreadOrchestrator]:
     return _orchestrator
+
+
+def get_agent_store() -> Optional[AgentStore]:
+    return _agent_store
 
 
 # ---------------------------------------------------------------------------
@@ -55,10 +63,19 @@ def create_app(
     Returns:
         Configured ``FastAPI`` application instance.
     """
-    global _registry, _recorder, _orchestrator
+    global _registry, _recorder, _orchestrator, _agent_store
 
     _registry = registry or AgentRegistry()
     _recorder = EventRecorder(db_path="atrium_events.db")
+    _agent_store = AgentStore(db_path="atrium_agents.db")
+
+    # Load previously-saved config-driven agents into the registry
+    for saved_config in _agent_store.load_all():
+        try:
+            agent_cls = create_agent_class(saved_config)
+            _registry.register(agent_cls)
+        except Exception:
+            pass  # skip broken configs on startup
     _guardrails = guardrails or GuardrailsConfig()
 
     if llm_config is not None:
@@ -84,6 +101,7 @@ def create_app(
     app.include_router(threads.router, prefix="/api/v1")
     app.include_router(control.router, prefix="/api/v1")
     app.include_router(registry_router.router, prefix="/api/v1")
+    app.include_router(agent_builder.router, prefix="/api/v1")
 
     # Mount dashboard static files if available
     dashboard_dir = os.path.join(os.path.dirname(__file__), "..", "dashboard", "static")

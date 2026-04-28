@@ -16,6 +16,7 @@
         </a>
         <div class="row gap-2 center">
           <span class="pill live" id="streamPill"><span class="dot"></span> idle</span>
+          <button class="btn ghost small" id="createAgentBtn" onclick="openAgentModal()">+ Create Agent</button>
           <button class="btn ghost small" id="newThreadBtn">+ New thread</button>
         </div>
       </div>
@@ -82,6 +83,57 @@
         </div>
       </aside>
     </main>
+
+    <!-- Agent Builder Modal -->
+    <div class="modal-overlay" id="agentModal" style="display:none;">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h3>Create Agent</h3>
+          <button class="btn ghost small" onclick="closeAgentModal()">&times;</button>
+        </div>
+        <div class="modal-body">
+          <div class="form-group">
+            <label>Name</label>
+            <input id="agentName" type="text" placeholder="weather_lookup" />
+          </div>
+          <div class="form-group">
+            <label>Description</label>
+            <input id="agentDesc" type="text" placeholder="Fetches current weather for a city" />
+          </div>
+          <div class="form-group">
+            <label>Capabilities (comma-separated)</label>
+            <input id="agentCaps" type="text" placeholder="weather, location, forecast" />
+          </div>
+          <div class="form-group">
+            <label>API URL</label>
+            <input id="agentUrl" type="text" placeholder="https://api.example.com/data" />
+          </div>
+          <div class="form-group">
+            <label>Method</label>
+            <select id="agentMethod">
+              <option value="GET">GET</option>
+              <option value="POST">POST</option>
+            </select>
+          </div>
+          <div class="form-group">
+            <label>Headers (one per line, key: value)</label>
+            <textarea id="agentHeaders" rows="2" placeholder="Authorization: Bearer xxx"></textarea>
+          </div>
+          <div class="form-group">
+            <label>Query Parameters (one per line, key=value, use {query} for input)</label>
+            <textarea id="agentParams" rows="3" placeholder="q={query}&#10;format=json"></textarea>
+          </div>
+          <div class="form-group">
+            <label>Response Path (dot notation to extract data)</label>
+            <input id="agentResponsePath" type="text" placeholder="data.results" />
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn ghost small" onclick="closeAgentModal()">Cancel</button>
+          <button class="btn primary small" onclick="createAgent()">Create Agent</button>
+        </div>
+      </div>
+    </div>
 
     <script src="/dashboard/static/console.js" type="module"></script>
   </body>

@@ -735,6 +735,90 @@ function wireUI() {
   $("#cancelBtn").addEventListener("click", () => controlAction("cancel"));
 }
 
+// ---------------------------------------------------------------
+// Agent Builder modal
+// ---------------------------------------------------------------
+
+function showToast(message, isError = false) {
+  const toast = document.createElement("div");
+  toast.className = `toast ${isError ? "toast-error" : "toast-success"}`;
+  toast.textContent = message;
+  document.body.appendChild(toast);
+  // Trigger entrance animation
+  requestAnimationFrame(() => toast.classList.add("visible"));
+  setTimeout(() => {
+    toast.classList.remove("visible");
+    setTimeout(() => toast.remove(), 300);
+  }, 3500);
+}
+
+function openAgentModal() {
+  $("#agentModal").style.display = "flex";
+}
+
+function closeAgentModal() {
+  $("#agentModal").style.display = "none";
+  ["agentName", "agentDesc", "agentCaps", "agentUrl", "agentHeaders", "agentParams", "agentResponsePath"].forEach((id) => {
+    const el = document.getElementById(id);
+    if (el) el.value = "";
+  });
+  const sel = document.getElementById("agentMethod");
+  if (sel) sel.value = "GET";
+}
+
+async function createAgent() {
+  const name = $("#agentName").value.trim();
+  const description = $("#agentDesc").value.trim();
+  if (!name || !description) {
+    showToast("Name and description are required", true);
+    return;
+  }
+
+  const capabilities = $("#agentCaps").value.split(",").map((s) => s.trim()).filter(Boolean);
+  const api_url = $("#agentUrl").value.trim();
+  const method = $("#agentMethod").value;
+  const response_path = $("#agentResponsePath").value.trim();
+
+  const headers = {};
+  const headerText = ($("#agentHeaders").value || "").trim();
+  if (headerText) {
+    headerText.split("\n").forEach((line) => {
+      const idx = line.indexOf(":");
+      if (idx > 0) headers[line.slice(0, idx).trim()] = line.slice(idx + 1).trim();
+    });
+  }
+
+  const query_params = {};
+  const paramText = ($("#agentParams").value || "").trim();
+  if (paramText) {
+    paramText.split("\n").forEach((line) => {
+      const idx = line.indexOf("=");
+      if (idx > 0) query_params[line.slice(0, idx).trim()] = line.slice(idx + 1).trim();
+    });
+  }
+
+  try {
+    await api("/api/v1/agents/create", {
+      method: "POST",
+      body: JSON.stringify({ name, description, capabilities, api_url, method, headers, query_params, response_path }),
+    });
+    closeAgentModal();
+    showToast(`Agent "${name}" created. The Commander can now use it.`);
+    await refreshThreads();
+  } catch (err) {
+    showToast("Failed to create agent: " + err.message, true);
+  }
+}
+
+// Expose to inline onclick handlers (module scope is not global)
+window.openAgentModal = openAgentModal;
+window.closeAgentModal = closeAgentModal;
+window.createAgent = createAgent;
+
+// ---------------------------------------------------------------
+// Boot
+// ---------------------------------------------------------------
+
 (async function boot() {
   wireUI();
   try { await refreshThreads(); } catch (e) { /* ignore on first boot */ }
