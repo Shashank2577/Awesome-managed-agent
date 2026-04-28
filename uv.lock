@@ -273,6 +273,7 @@ name = "atrium"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
+    { name = "aiofiles" },
     { name = "aiosqlite" },
     { name = "fastapi" },
     { name = "httpx" },
@@ -324,6 +325,7 @@ postgres = [
 [package.metadata]
 requires-dist = [
     { name = "aiodocker", marker = "extra == 'harness'", specifier = ">=0.21" },
+    { name = "aiofiles", specifier = ">=25.1.0" },
     { name = "aiofiles", marker = "extra == 'dev'", specifier = ">=23.0" },
     { name = "aiofiles", marker = "extra == 'harness'", specifier = ">=23.0" },
     { name = "aiosqlite", specifier = ">=0.20" },

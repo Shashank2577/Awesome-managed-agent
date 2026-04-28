@@ -125,11 +125,12 @@ def create_app(
         # Open persistent stores on startup
         await _recorder.open()
         await _thread_store.open()
+        await app_state.mcp_server_store.open()
+        await app_state.session_store.open()
         logger.info("Atrium started — stores opened")
         yield
         # Close on shutdown
-        await _recorder.close()
-        await _thread_store.close()
+        await app_state.shutdown()
         logger.info("Atrium shutdown — stores closed")
 
     app = FastAPI(
@@ -138,6 +139,27 @@ def create_app(
         version="0.1.0",
         lifespan=lifespan,
     )
+
+    from atrium.api.state import AppState
+    from atrium.core.config import get_config
+    from atrium.core.storage.sqlite import SQLiteStorage
+    from atrium.core.workspace_store import WorkspaceStore
+    from atrium.core.mcp_server_store import MCPServerStore
+    from atrium.harness.session import SessionStore
+
+    # We mock or create missing stores for the state object
+    app_state = AppState(
+        config=get_config(),
+        storage=SQLiteStorage("atrium.db"),
+        workspace_store=WorkspaceStore("atrium.db"),
+        thread_store=_thread_store,
+        agent_store=_agent_store,
+        recorder=_recorder,
+        mcp_server_store=MCPServerStore("atrium_mcp.db"),
+        session_store=SessionStore("atrium_sessions.db"),
+    )
+    app.state.atrium = app_state
+    AppState.set_instance(app_state)
 
     setup_middleware(app)
 

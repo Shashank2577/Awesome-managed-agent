@@ -485,7 +485,7 @@ class ThreadView {
 
   startStream() {
     if (this.eventSource) this.eventSource.close();
-    const es = new EventSource(`/api/v1/threads/${this.threadId}/stream`);
+    const es = new EventSource(`/api/v1/sessions/${this.threadId}/stream`);
     es.onmessage = (msg) => {
       try {
         this.handleEvent(JSON.parse(msg.data));
@@ -634,10 +634,10 @@ function renderThreadList() {
   host.innerHTML = appState.threads
     .map(
       (t) => `
-        <div class="thread-row ${appState.currentThread?.threadId === t.thread_id ? "active" : ""}" data-id="${escape(t.thread_id)}">
+        <div class="thread-row ${appState.currentThread?.threadId === t.session_id ? "active" : ""}" data-id="${escape(t.session_id)}">
           <div class="t-title">${escape(t.title || "Untitled")}</div>
           <div class="t-sub">${escape(t.objective || "").slice(0, 80)}</div>
-          <div class="t-sub mono">${escape(t.status || "CREATED")} · #${escape(t.thread_id.slice(0, 6))}</div>
+          <div class="t-sub mono">${escape(t.status || "CREATED")} · #${escape(t.session_id.slice(0, 6))}</div>
         </div>
       `,
     )
@@ -648,8 +648,8 @@ function renderThreadList() {
 }
 
 async function refreshThreads() {
-  const data = await api("/api/v1/threads");
-  appState.threads = data.threads || [];
+  const data = await api("/api/v1/sessions");
+  appState.threads = data || [];
   renderThreadList();
 }
 
@@ -701,30 +701,25 @@ async function loadCategories() {
 
 async function refreshAgents() {
   try {
-    const url = currentCategoryFilter
-      ? `/api/v1/agents?category=${encodeURIComponent(currentCategoryFilter)}`
-      : "/api/v1/agents";
+    const url = "/api/v1/mcp-servers";
     const data = await api(url);
-    const agents = data.agents || [];
+    const agents = data || [];
     const host = $("#agentList");
-    // Re-render pills to reflect updated active state
-    if (cachedCategories) renderCategoryPills(cachedCategories);
     // Update count to reflect visible agents
     $("#agentCount").textContent = agents.length;
 
     if (agents.length === 0) {
-      host.innerHTML = `<div class="empty-state">No agents yet. Click <strong>+ Create Agent</strong> to add one.</div>`;
+      host.innerHTML = `<div class="empty-state">No MCP servers registered. Click <strong>+ Add MCP Server</strong> to connect external tools.</div>`;
       return;
     }
 
     host.innerHTML = agents.map(a => {
-      const displayName = a.name.replace(/^seed\//, "");
-      const categoryBadge = a.category ? `<span class="agent-category-badge">${escape(a.category)}</span>` : "";
+      const displayName = a.name;
+      const categoryBadge = a.transport ? `<span class="agent-category-badge">${escape(a.transport)}</span>` : "";
       return `
         <div class="agent-row" data-name="${escape(a.name)}">
           <div class="agent-row-name" style="display:flex;align-items:center;gap:6px;">${escape(displayName)}${categoryBadge}</div>
-          <div class="agent-row-desc">${escape(a.description).slice(0, 60)}</div>
-          <div class="agent-row-caps">${(a.capabilities || []).map(c => `<span class="cap-tag">${escape(c)}</span>`).join("")}</div>
+          <div class="agent-row-desc mono" style="font-size: 11px;">${escape(a.upstream).slice(0, 60)}</div>
         </div>
       `;
     }).join("");
@@ -851,38 +846,14 @@ function closeAgentDetail() {
 async function deleteAgent() {
   if (!currentAgentDetail) return;
   const name = currentAgentDetail.name;
-  if (!confirm(`Delete agent "${name}"? This cannot be undone.`)) return;
+  if (!confirm(`Delete MCP server "${name}"? This cannot be undone.`)) return;
   try {
-    await api(`/api/v1/agents/${name}`, { method: "DELETE" });
+    await api(`/api/v1/mcp-servers/${name}`, { method: "DELETE" });
     closeAgentDetail();
-    showToast(`Agent "${name}" deleted`);
+    showToast(`MCP server "${name}" deleted`);
     await refreshAgents();
   } catch (err) {
     showToast("Failed to delete: " + err.message, true);
-  }
-}
-
-function editAgent() {
-  if (!currentAgentDetail) return;
-  closeAgentDetail();
-  openAgentModal();
-
-  $("#agentName").value = currentAgentDetail.name;
-  $("#agentDesc").value = currentAgentDetail.description;
-  $("#agentCaps").value = (currentAgentDetail.capabilities || []).join(", ");
-
-  const cfg = currentAgentDetail._config;
-  if (cfg) {
-    $("#agentUrl").value = cfg.api_url || "";
-    $("#agentMethod").value = cfg.method || "GET";
-    $("#agentResponsePath").value = cfg.response_path || "";
-
-    if (cfg.headers && Object.keys(cfg.headers).length) {
-      $("#agentHeaders").value = Object.entries(cfg.headers).map(([k, v]) => `${k}: ${v}`).join("\n");
-    }
-    if (cfg.query_params && Object.keys(cfg.query_params).length) {
-      $("#agentParams").value = Object.entries(cfg.query_params).map(([k, v]) => `${k}=${v}`).join("\n");
-    }
   }
 }
 
@@ -985,109 +956,43 @@ function showToast(message, isError = false) {
   }, 3500);
 }
 
-function toggleAgentTypeFields() {
-  const agentType = document.getElementById("agentType")?.value || "http";
-  const httpFields = document.getElementById("httpFields");
-  const llmFields = document.getElementById("llmFields");
-  if (httpFields) httpFields.style.display = agentType === "http" ? "" : "none";
-  if (llmFields) llmFields.style.display = agentType === "llm" ? "" : "none";
-}
-
-async function populateCategorySelect() {
-  const sel = document.getElementById("agentCategory");
-  if (!sel) return;
-  // Only populate if still just the default option
-  if (sel.options.length > 1) return;
-  const categories = await loadCategories();
-  categories.forEach((cat) => {
-    const opt = document.createElement("option");
-    opt.value = cat;
-    opt.textContent = cat;
-    sel.appendChild(opt);
-  });
-}
-
 function openAgentModal() {
   $("#agentModal").style.display = "flex";
-  // Reset type fields to default state
-  toggleAgentTypeFields();
-  // Populate category dropdown (no-op if already populated)
-  populateCategorySelect();
+  $("#agentName").value = "";
+  $("#agentTransport").value = "stdio";
+  $("#agentUpstream").value = "";
 }
 
 function closeAgentModal() {
   $("#agentModal").style.display = "none";
-  ["agentName", "agentDesc", "agentCaps", "agentUrl", "agentHeaders", "agentParams", "agentResponsePath", "agentSystemPrompt", "agentModel"].forEach((id) => {
-    const el = document.getElementById(id);
-    if (el) el.value = "";
-  });
-  const sel = document.getElementById("agentMethod");
-  if (sel) sel.value = "GET";
-  const typeSel = document.getElementById("agentType");
-  if (typeSel) typeSel.value = "http";
-  const catSel = document.getElementById("agentCategory");
-  if (catSel) catSel.value = "";
-  toggleAgentTypeFields();
+  $("#agentName").value = "";
+  $("#agentTransport").value = "stdio";
+  $("#agentUpstream").value = "";
 }
 
 async function createAgent() {
   const name = $("#agentName").value.trim();
-  const description = $("#agentDesc").value.trim();
-  if (!name || !description) {
-    showToast("Name and description are required", true);
+  const transport = $("#agentTransport").value;
+  const upstream = $("#agentUpstream").value.trim();
+
+  if (!name || !transport || !upstream) {
+    showToast("Name, Transport, and Upstream are required", true);
     return;
   }
 
-  const capabilities = $("#agentCaps").value.split(",").map((s) => s.trim()).filter(Boolean);
-  const agent_type = (document.getElementById("agentType")?.value || "http");
-  const category = (document.getElementById("agentCategory")?.value || "") || undefined;
-
-  let payload = { name, description, capabilities, agent_type };
-  if (category) payload.category = category;
-
-  if (agent_type === "http") {
-    const api_url = $("#agentUrl").value.trim();
-    const method = $("#agentMethod").value;
-    const response_path = $("#agentResponsePath").value.trim();
-
-    const headers = {};
-    const headerText = ($("#agentHeaders").value || "").trim();
-    if (headerText) {
-      headerText.split("\n").forEach((line) => {
-        const idx = line.indexOf(":");
-        if (idx > 0) headers[line.slice(0, idx).trim()] = line.slice(idx + 1).trim();
-      });
-    }
-
-    const query_params = {};
-    const paramText = ($("#agentParams").value || "").trim();
-    if (paramText) {
-      paramText.split("\n").forEach((line) => {
-        const idx = line.indexOf("=");
-        if (idx > 0) query_params[line.slice(0, idx).trim()] = line.slice(idx + 1).trim();
-      });
-    }
-
-    payload = { ...payload, api_url, method, headers, query_params, response_path };
-  } else {
-    // llm
-    const system_prompt = (document.getElementById("agentSystemPrompt")?.value || "").trim();
-    const modelVal = (document.getElementById("agentModel")?.value || "").trim();
-    const model = modelVal || "anthropic:claude-sonnet-4-6";
-    payload = { ...payload, system_prompt, model };
-  }
+  const payload = { name, transport, upstream };
 
   try {
     try {
-      await api("/api/v1/agents/create", {
+      await api("/api/v1/mcp-servers", {
         method: "POST",
         body: JSON.stringify(payload),
       });
     } catch (err) {
-      if (err.message.includes("already exists") || err.message.includes("400")) {
+      if (err.message.includes("409")) {
         // Delete and recreate (edit mode)
-        await api(`/api/v1/agents/${name}`, { method: "DELETE" });
-        await api("/api/v1/agents/create", {
+        await api(`/api/v1/mcp-servers/${name}`, { method: "DELETE" });
+        await api("/api/v1/mcp-servers", {
           method: "POST",
           body: JSON.stringify(payload),
         });
@@ -1096,10 +1001,10 @@ async function createAgent() {
       }
     }
     closeAgentModal();
-    showToast(`Agent "${name}" saved. The Commander can now use it.`);
+    showToast(`MCP Server "${name}" registered.`);
     await refreshAgents();
   } catch (err) {
-    showToast("Failed to create agent: " + err.message, true);
+    showToast("Failed to register MCP server: " + err.message, true);
   }
 }
 
@@ -1110,8 +1015,6 @@ window.createAgent = createAgent;
 window.showAgentDetail = showAgentDetail;
 window.closeAgentDetail = closeAgentDetail;
 window.deleteAgent = deleteAgent;
-window.editAgent = editAgent;
-window.toggleAgentTypeFields = toggleAgentTypeFields;
 
 // ---------------------------------------------------------------
 // Boot
@@ -1121,8 +1024,6 @@ window.toggleAgentTypeFields = toggleAgentTypeFields;
   wireUI();
   try { await refreshThreads(); } catch (e) { /* ignore on first boot */ }
   try {
-    const categories = await loadCategories();
-    await renderCategoryPills(categories);
     await refreshAgents();
   } catch (e) { /* ignore on first boot */ }
 })();

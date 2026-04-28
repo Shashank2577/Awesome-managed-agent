@@ -1,176 +1,104 @@
-# Atrium
+# Atrium: Managed Agent Orchestrator
 
-Observable, cost-bounded, human-in-the-loop agent orchestration on top of LangGraph.
+**Atrium** has evolved from a simple Python orchestration script running on top of LangGraph to a fully-featured, production-ready **Managed Agent Orchestration Platform**. It allows you to build, deploy, and scale complex agentic workflows in secure, multi-tenant sandboxes with full observability and external tool integrations.
 
-## Quick Start
+## 🚀 The Evolution (From 0 to 1)
 
+Originally, Atrium was a lightweight wrapper around LangGraph that ran agent threads in-memory within the same Python process. While this worked for simple, trusted scripts, it wasn't suitable for untrusted code execution or enterprise-scale deployment.
+
+We have entirely overhauled the architecture across 6 implementation phases:
+
+1. **Multi-Tenancy & Auth:** Transitioned from a single-user system to a robust API Key + Workspace model. We swapped out in-memory state for persistent SQLite/PostgreSQL storage, ensuring that API keys are hashed and stored securely, and all sessions and MCP servers are isolated per workspace.
+2. **Containerized Sandboxing:** Replaced the unsafe, local `PythonREPL` with a dynamic `HarnessAgent`. Agents now execute their code in ephemeral, network-isolated sandboxes. The system dynamically scales from an in-memory test runner, to local Docker containers, all the way to Kubernetes Pods with PVC mounts.
+3. **Advanced Integrations:** 
+   * **Webhooks:** Added reliable asynchronous webhook delivery for system events (e.g., `session.completed`, `session.failed`) with cryptographic HMAC signing, automatic retries, and exponential backoff via a dedicated background worker.
+   * **MCP (Model Context Protocol):** Built a registry and proxy routing system to connect agents directly to standard MCP servers using SSE (Server-Sent Events) or HTTP, allowing LLMs to safely use external data tools.
+4. **Enhanced API Surface:** Upgraded from basic CRUD to a fully streaming-capable REST API. Clients can connect via Server-Sent Events (`/stream`) to get real-time, token-by-token LLM output and lifecycle events. We added pause, resume, checkpointing, and cancellation workflows.
+5. **Production Hardening:** Wrapped the entire application in OpenTelemetry (for distributed tracing) and Prometheus (for metrics scraping). Created comprehensive Helm charts to deploy the API, PostgreSQL database, and Webhook worker into Kubernetes with Horizontal Pod Autoscaling and restricted Network Policies.
+
+## ✨ Features
+
+- **Multi-Tenant REST API**: Manage API keys, workspaces, and sessions via a robust FastAPI backend.
+- **Secure Sandbox Execution**: LLM-generated code runs in ephemeral Docker containers or Kubernetes pods with hard resource limits and restricted file systems.
+- **Real-Time Streaming**: Consume token-level outputs and execution events via Server-Sent Events (SSE).
+- **Asynchronous Webhooks**: Receive cryptographically signed payload notifications when sessions pause, complete, or fail.
+- **Model Context Protocol (MCP)**: Safely connect external data sources (SQL, GitHub, etc.) to your agents.
+- **Built-in Observability**: Automatic Prometheus metrics exposure (`/metrics`) and OpenTelemetry traces.
+- **Kubernetes Native**: Deploy seamlessly to production clusters using the included Helm chart.
+
+## 📦 Quick Start (Local Development)
+
+### Prerequisites
+- Python 3.12+ (managed via `uv`)
+- Docker (for local sandbox execution)
+
+### 1. Install Dependencies
 ```bash
-pip install -e ".[all]"
-
-# Set ANY one of these — Atrium auto-detects which provider to use:
-export GEMINI_API_KEY="your-key"     # Google Gemini
-# OR: export OPENAI_API_KEY="your-key"   # OpenAI
-# OR: export ANTHROPIC_API_KEY="your-key" # Anthropic
-
-python -m atrium.examples.hello_world.app
+git clone https://github.com/Atrium/Awesome-managed-agent.git
+cd Awesome-managed-agent
+uv sync
 ```
 
-Open http://localhost:8080 — type a goal and watch agents work.
-
-## What Atrium Gives You Out of the Box
-
-- **185+ pre-built agents** across 11 categories (research, coding, writing, security, data, ops, design, communication, analysis, creative, productivity)
-- Observable, cost-bounded execution via LangGraph
-- Human-in-the-loop controls (pause, approve, reject)
-- Built-in dashboard with real-time agent visualization
-- SQLite persistence — threads and agents survive restarts
-
-## Two Ways to Build Agents
-
-### Option 1: From the Dashboard (no code)
-
-Click **+ Create Agent** in the dashboard and fill in the form:
-
-| Field | Example |
-|---|---|
-| Name | `weather_lookup` |
-| Description | `Fetches current weather for a city` |
-| Capabilities | `weather, location` |
-| API URL | `https://api.weatherapi.com/v1/current.json` |
-| Method | `GET` |
-| Query Params | `q={query}` |
-| Response Path | `current` |
-
-The agent is registered immediately — the Commander can use it in the next thread. Agents persist to SQLite and survive server restarts.
-
-You can also manage agents from the API:
-
+### 2. Run the API Server
+By default, the server runs with SQLite persistence and the Docker sandbox backend.
 ```bash
-# Create
-curl -X POST http://localhost:8080/api/v1/agents/create \
+# Enable the Docker sandbox backend
+export ATRIUM_SANDBOX_BACKEND="docker"
+export GEMINI_API_KEY="your-google-gemini-key"
+
+uv run uvicorn "atrium.api.app:create_app" --host 0.0.0.0 --port 8080 --factory
+```
+
+### 3. Run the Webhook Delivery Worker
+In a separate terminal, start the dedicated background worker that processes webhook delivery queues:
+```bash
+uv run atrium worker webhook-delivery
+```
+
+### 4. Create a Session
+You can now create a new workspace and run an agent session via the API:
+```bash
+# Create a new session (Assuming you have generated an API key)
+curl -X POST http://localhost:8080/api/v1/sessions \
+  -H "Authorization: Bearer <YOUR_API_KEY>" \
   -H "Content-Type: application/json" \
-  -d '{"name": "wiki", "description": "Search Wikipedia", "capabilities": ["search"], "api_url": "https://en.wikipedia.org/w/api.php", "method": "GET", "query_params": {"action": "query", "list": "search", "srsearch": "{query}", "format": "json"}, "response_path": "query.search"}'
-
-# List
-curl http://localhost:8080/api/v1/agents
-
-# View config
-curl http://localhost:8080/api/v1/agents/wiki/config
-
-# Delete
-curl -X DELETE http://localhost:8080/api/v1/agents/wiki
+  -d '{
+    "objective": "Write a python script that calculates the 100th Fibonacci number and run it."
+  }'
 ```
 
-### Option 2: In Python (full control)
+## 🏗 Kubernetes Production Deployment
 
-```python
-from atrium import Agent, Atrium
-
-class MyAgent(Agent):
-    name = "my_agent"
-    description = "Does something useful"
-    capabilities = ["analyze"]
-
-    async def run(self, input_data: dict) -> dict:
-        await self.say("Working...")
-        return {"result": "done"}
-
-app = Atrium(agents=[MyAgent])
-app.serve()
-```
-
-## Scaffold a New Agent
+The project is fully prepped for Kubernetes deployment using Helm.
 
 ```bash
-atrium new agent price_checker
+# Deploy to your cluster
+helm upgrade --install atrium ./deploy/helm/atrium \
+  --namespace atrium-system \
+  --create-namespace \
+  --set ingress.enabled=true \
+  --set ingress.hosts[0].host="atrium.yourdomain.com"
 ```
 
-## Docker & Production Deployment
+*For detailed production runbooks (rollbacks, stuck sessions, etc.), see the `docs/operations/runbooks/` directory.*
 
-### Local Testing
-```bash
-docker build -t atrium-api .
-docker run -p 8080:8080 -e GEMINI_API_KEY=your-key atrium-api
-```
+## 📖 Using the Platform
 
-Run with the hello_world example pre-loaded:
-```bash
-docker run -p 8080:8080 -e GEMINI_API_KEY=your-key atrium-api atrium example run hello_world
-```
+### The Atrium UI Dashboard
+The UI Dashboard (`http://localhost:8080/dashboard`) is still the heart of the user experience. It has been updated seamlessly to consume the new `v1` REST APIs and SSE endpoints. You can monitor active sessions, watch the sandbox execution logs live, and interact with the human-in-the-loop checkpoints directly from the console.
 
-### Production via Helm (Kubernetes)
-Atrium is designed to run on Kubernetes for scalable, sandboxed execution.
-
-1. Configure `deploy/helm/atrium/values.yaml` (especially `sandbox.namespace`).
-2. Deploy the chart:
-   ```bash
-   helm upgrade --install atrium ./deploy/helm/atrium -n atrium-system --create-namespace
-   ```
-
-**Production Features:**
-- **OpenTelemetry & Prometheus:** Set `OTEL_EXPORTER_OTLP_ENDPOINT` for traces. Metrics available at `/metrics`.
-- **Async Webhooks:** Webhook delivery scales independently via the `atrium worker webhook-delivery` command.
-- **Isolated Sandboxes:** Sessions run in dedicated Pods via the `KubernetesSandboxRunner`.
-
-See `docs/operations/runbooks/` for operational guides (Deploy, Rollback, Stuck Sessions, Backfill).
-
-## Agent Marketplace
-
-Atrium ships with **185+ pre-built agents** across 11 categories: research, coding, writing, security, data, ops, design, communication, analysis, creative, and productivity.
-
-Two agent types are included:
-- **HTTP API wrappers** — config-driven agents that call public REST APIs (no code required)
-- **LLM experts** — config-driven agents with a system prompt and a model
-
-Browse by category in the dashboard sidebar. Re-seed or reset the corpus via the CLI:
+### Model Context Protocol (MCP) Integration
+You can register MCP servers to expand your agent's capabilities. For example, to give your agent access to a local SQLite database:
 
 ```bash
-atrium agents seed           # seed on fresh install
-atrium agents seed --force   # reset corpus to defaults
+curl -X POST http://localhost:8080/api/v1/mcp-servers \
+  -H "Authorization: Bearer <YOUR_API_KEY>" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "sqlite-tool",
+    "transport": "stdio",
+    "upstream": "uvx mcp-server-sqlite --db-path /workspace/data.db"
+  }'
 ```
 
-See [Seeding Agents](docs/guide/seeding-agents.md) for the full guide and [CREDITS](docs/CREDITS.md) for third-party attributions.
-
-## Dashboard Features
-
-- **Real-time execution** — watch agents plan, execute, and report live via SSE
-- **Agent management** — create, view, edit, delete agents from the UI; browse 185+ built-in agents by category
-- **Plan visualization** — DAG graph showing agent dependencies
-- **HITL controls** — pause, resume, cancel, approve, reject mid-execution
-- **Budget tracking** — live cost bar with guardrail enforcement
-- **Thread history** — SQLite-persisted, survives restarts
-
-## Run Tests
-
-```bash
-pip install -e ".[dev,all]"
-pytest tests/ -v  # 103 tests
-```
-
-## Docs
-
-- [Getting Started](docs/getting-started.md)
-- [Writing Agents](docs/guide/writing-agents.md)
-- [Seeding Agents](docs/guide/seeding-agents.md)
-- [Agent Patterns](docs/guide/agent-patterns.md)
-- [Testing](docs/guide/testing-agents.md)
-- [Concepts](docs/guide/concepts.md)
-- [API Reference](docs/spec/API.md)
-- [Data Model](docs/spec/DATA_MODEL.md)
-- [Credits](docs/CREDITS.md)
-
-## What's Inside
-
-```
-src/atrium/
-  core/        Agent base class, registry, models, guardrails, HTTPAgent, agent store
-  engine/      LLM Commander, LangGraph graph builder, orchestrator
-  streaming/   Event recorder (SQLite-backed), SSE fan-out
-  api/         FastAPI with 16 endpoints + OpenAPI docs
-  dashboard/   Built-in real-time web console with agent builder
-  examples/    hello_world (Wikipedia) + observe (SRE)
-  testing/     run_thread() helper, MockCommander
-docs/
-  spec/        Specification (matches implementation)
-  guide/       Developer guides
-```
+The agent will automatically be granted the tools provided by the MCP server upon starting a session.

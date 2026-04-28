@@ -26,6 +26,7 @@ dependencies = [
     "prometheus-client>=0.25.0",
     "prometheus-fastapi-instrumentator>=7.1.0",
     "kubernetes-asyncio>=35.0.1",
+    "aiofiles>=25.1.0",
 ]
 
 [project.optional-dependencies]

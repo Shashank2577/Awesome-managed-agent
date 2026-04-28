@@ -24,6 +24,8 @@ class AppState:
     thread_store: ThreadStore
     agent_store: AgentStore
     recorder: EventRecorder
+    mcp_server_store: "MCPServerStore" = None  # type: ignore[assignment]
+    session_store: "SessionStore" = None  # type: ignore[assignment]
     # per-workspace caches
     _registries: dict[str, "AgentRegistry"] = field(default_factory=dict)
     _orchestrators: dict[str, "ThreadOrchestrator"] = field(default_factory=dict)
@@ -61,6 +63,22 @@ class AppState:
         """Close all open resources."""
         await self.storage.close()
         await self.recorder.close()
+        if self.mcp_server_store:
+            await self.mcp_server_store.close()
+        if self.session_store:
+            await self.session_store.close()
+
+    _instance = None
+
+    @classmethod
+    def instance(cls) -> "AppState":
+        if cls._instance is None:
+            raise RuntimeError("AppState not initialized")
+        return cls._instance
+
+    @classmethod
+    def set_instance(cls, state: "AppState") -> None:
+        cls._instance = state
 
 
 def get_app_state(request: Any) -> AppState:

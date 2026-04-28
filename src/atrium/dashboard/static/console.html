@@ -16,8 +16,8 @@
         </a>
         <div class="row gap-2 center">
           <span class="pill live" id="streamPill"><span class="dot"></span> idle</span>
-          <button class="btn ghost small" id="createAgentBtn" onclick="openAgentModal()">+ Create Agent</button>
-          <button class="btn ghost small" id="newThreadBtn">+ New thread</button>
+          <button class="btn ghost small" id="createAgentBtn" onclick="openAgentModal()">+ Add MCP Server</button>
+          <button class="btn ghost small" id="newThreadBtn">+ New Session</button>
         </div>
       </div>
     </nav>
@@ -25,38 +25,37 @@
     <main class="app-shell">
       <aside class="left-rail">
         <div class="rail-head">
-          <span class="title">Threads</span>
+          <span class="title">Sessions</span>
           <span class="muted mono" id="threadCount">0</span>
         </div>
         <div class="rail-body" id="threadList"></div>
         <div class="rail-divider"></div>
         <div class="rail-head">
-          <span class="title">Agents</span>
+          <span class="title">MCP Servers</span>
           <span class="muted mono" id="agentCount">0</span>
         </div>
-        <div id="category-filter-row"></div>
         <div class="rail-body" id="agentList"></div>
       </aside>
 
       <section class="center-pane">
         <div class="thread-head">
           <div class="col gap-1" style="min-width:0;">
-            <div class="t-title" id="threadTitle">Start a thread</div>
-            <div class="muted mono" id="threadObjective" style="font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Try a prompt below to spin up the commander.</div>
+            <div class="t-title" id="threadTitle">Start a sandbox session</div>
+            <div class="muted mono" id="threadObjective" style="font-size:12px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">Try a prompt below to spin up an isolated Kubernetes / Docker execution sandbox.</div>
           </div>
           <div class="controls">
-            <button class="btn ghost small" id="pauseBtn" title="Pause" disabled>Pause</button>
-            <button class="btn ghost small" id="resumeBtn" title="Resume" disabled>Resume</button>
-            <button class="btn ghost small" id="cancelBtn" title="Cancel" disabled>Cancel</button>
+            <button class="btn ghost small" id="pauseBtn" title="Pause" disabled>Pause Sandbox</button>
+            <button class="btn ghost small" id="resumeBtn" title="Resume" disabled>Resume Sandbox</button>
+            <button class="btn ghost small" id="cancelBtn" title="Cancel" disabled>Cancel Sandbox</button>
           </div>
         </div>
 
         <div class="transcript" id="transcript">
           <div class="msg">
-            <div class="avatar cmd">AT</div>
+            <div class="avatar cmd">AX</div>
             <div class="bubble cmd">
-              <div class="who"><strong>Atrium commander</strong> · system</div>
-              Hi. Type a goal below and I'll plan, hire specialists, run them in parallel, and ship a report. Try one of the suggested prompts to see a pivot in action.
+              <div class="who"><strong>Atrium System</strong> · orchestrator</div>
+              Hi. Type a goal below. I'll spin up an ephemeral execution sandbox, orchestrate the agents inside it, and stream the results back to you securely.
             </div>
           </div>
         </div>
@@ -64,13 +63,13 @@
         <div class="composer">
           <form class="composer-inner" id="composer">
             <input id="composerInput" type="text" autocomplete="off"
-                   placeholder="Describe a goal — e.g. 'investigate the payments latency spike' " />
-            <button class="btn primary small" type="submit">Run →</button>
+                   placeholder="Describe a goal — e.g. 'Write a python script to calculate the 100th Fibonacci number' " />
+            <button class="btn primary small" type="submit">Deploy Sandbox →</button>
           </form>
           <div class="quick">
-            <button class="chip" data-prompt="Investigate a P1 incident: payments service latency is spiking and customers are seeing checkout errors.">Incident triage</button>
-            <button class="chip" data-prompt="Run an observability readiness review across metrics, traces, logs, alerts, and SLOs.">Observability review</button>
-            <button class="chip" data-prompt="Audit our cost model: retention windows, top spend drivers, and capacity headroom for the next 90 days.">Cost audit</button>
+            <button class="chip" data-prompt="Analyze the sqlite database using the MCP tool.">Query Database</button>
+            <button class="chip" data-prompt="Investigate a P1 incident: payments service latency is spiking.">Incident triage</button>
+            <button class="chip" data-prompt="Run an observability readiness review across metrics, traces, logs.">Observability review</button>
           </div>
         </div>
       </section>
@@ -91,95 +90,49 @@
       </aside>
     </main>
 
-    <!-- Agent Detail Modal -->
+    <!-- MCP Server Detail Modal -->
     <div class="modal-overlay" id="agentDetailModal" style="display:none;">
       <div class="modal-content">
         <div class="modal-header">
-          <h3 id="agentDetailName">Agent</h3>
+          <h3 id="agentDetailName">MCP Server</h3>
           <button class="btn ghost small" onclick="closeAgentDetail()">&times;</button>
         </div>
         <div class="modal-body" id="agentDetailBody">
         </div>
         <div class="modal-footer">
-          <button class="btn ghost small" onclick="deleteAgent()" style="color:var(--pivot);">Delete</button>
-          <button class="btn ghost small" onclick="editAgent()">Edit</button>
+          <button class="btn ghost small" onclick="deleteAgent()" style="color:var(--pivot);">Remove</button>
           <button class="btn ghost small" onclick="closeAgentDetail()">Close</button>
         </div>
       </div>
     </div>
 
-    <!-- Agent Builder Modal -->
+    <!-- MCP Server Modal -->
     <div class="modal-overlay" id="agentModal" style="display:none;">
       <div class="modal-content">
         <div class="modal-header">
-          <h3>Create Agent</h3>
+          <h3>Register MCP Server</h3>
           <button class="btn ghost small" onclick="closeAgentModal()">&times;</button>
         </div>
         <div class="modal-body">
           <div class="form-group">
             <label>Name</label>
-            <input id="agentName" type="text" placeholder="weather_lookup" />
+            <input id="agentName" type="text" placeholder="sqlite" />
           </div>
           <div class="form-group">
-            <label>Description</label>
-            <input id="agentDesc" type="text" placeholder="Fetches current weather for a city" />
-          </div>
-          <div class="form-group">
-            <label>Capabilities (comma-separated)</label>
-            <input id="agentCaps" type="text" placeholder="weather, location, forecast" />
-          </div>
-          <div class="form-group">
-            <label>Agent Type</label>
-            <select id="agentType" onchange="toggleAgentTypeFields()">
-              <option value="http">HTTP API Agent</option>
-              <option value="llm">LLM Agent</option>
+            <label>Transport</label>
+            <select id="agentTransport">
+              <option value="stdio">stdio (Local Command)</option>
+              <option value="sse">sse (Remote URL)</option>
             </select>
           </div>
           <div class="form-group">
-            <label>Category</label>
-            <select id="agentCategory">
-              <option value="">-- select category --</option>
-            </select>
-          </div>
-          <div id="httpFields">
-            <div class="form-group">
-              <label>API URL</label>
-              <input id="agentUrl" type="text" placeholder="https://api.example.com/data" />
-            </div>
-            <div class="form-group">
-              <label>Method</label>
-              <select id="agentMethod">
-                <option value="GET">GET</option>
-                <option value="POST">POST</option>
-              </select>
-            </div>
-            <div class="form-group">
-              <label>Headers (one per line, key: value)</label>
-              <textarea id="agentHeaders" rows="2" placeholder="Authorization: Bearer xxx"></textarea>
-            </div>
-            <div class="form-group">
-              <label>Query Parameters (one per line, key=value, use {query} for input)</label>
-              <textarea id="agentParams" rows="3" placeholder="q={query}&#10;format=json"></textarea>
-            </div>
-            <div class="form-group">
-              <label>Response Path (dot notation to extract data)</label>
-              <input id="agentResponsePath" type="text" placeholder="data.results" />
-            </div>
-          </div>
-          <div id="llmFields" style="display:none;">
-            <div class="form-group">
-              <label>System Prompt</label>
-              <textarea id="agentSystemPrompt" rows="5" placeholder="System prompt..."></textarea>
-            </div>
-            <div class="form-group">
-              <label>Model</label>
-              <input id="agentModel" type="text" placeholder="Model (default: anthropic:claude-sonnet-4-6)" />
-            </div>
+            <label>Upstream Command/URL</label>
+            <input id="agentUpstream" type="text" placeholder="uvx mcp-server-sqlite --db-path /data.db" />
           </div>
         </div>
         <div class="modal-footer">
           <button class="btn ghost small" onclick="closeAgentModal()">Cancel</button>
-          <button class="btn primary small" onclick="createAgent()">Create Agent</button>
+          <button class="btn primary small" onclick="createAgent()">Register Server</button>
         </div>
       </div>
     </div>
