@@ -250,13 +250,13 @@ async def create_session(
     if sess_store is None:
         raise HTTPException(503, "Session store not available")
 
-    session = await sess_store.create(
+    session = await sess_store.create(Session(
         workspace_id=workspace.workspace_id,
         objective=req.objective,
         title=f"Session: {req.agent or req.runtime}",
         runtime=req.runtime,
         model=req.model_override or req.model,
-    )
+    ))
 
     await state.recorder.emit(
         session.session_id,
