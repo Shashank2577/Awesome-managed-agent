@@ -63,6 +63,40 @@ class Session(BaseModel):
     def workspace_dir(self) -> Path:
         return Path(self.workspace_path)
 
+    @property
+    def checkpoint_path(self) -> Path:
+        """Path to the checkpoint file inside the workspace (.atrium dir)."""
+        return self.workspace_dir / ".atrium" / "checkpoint.json"
+
+    @property
+    def pause_signal_path(self) -> Path:
+        """Entrypoints poll this file to know they should checkpoint and exit."""
+        return self.workspace_dir / ".atrium" / "please_pause"
+
+    async def save_checkpoint(self, blob: bytes) -> None:
+        """Persist checkpoint blob to {workspace_dir}/.atrium/checkpoint.json.
+
+        Production note: also replicate to S3 at
+        s3://{config.checkpoint_bucket}/{workspace_id}/{session_id}/checkpoint.json
+        (not implemented in single-host mode).
+        """
+        import asyncio
+        cp_dir = self.workspace_dir / ".atrium"
+        await asyncio.to_thread(cp_dir.mkdir, parents=True, exist_ok=True)
+        tmp = self.checkpoint_path.with_suffix(".tmp")
+        await asyncio.to_thread(tmp.write_bytes, blob)
+        await asyncio.to_thread(tmp.rename, self.checkpoint_path)
+
+    async def load_checkpoint(self) -> bytes | None:
+        """Return checkpoint bytes if available, else None.
+
+        Production note: if not on local filesystem, pull from S3 first.
+        """
+        if self.checkpoint_path.exists():
+            import asyncio
+            return await asyncio.to_thread(self.checkpoint_path.read_bytes)
+        return None
+
 
 _SCHEMA_SQL = """
 CREATE TABLE IF NOT EXISTS sessions (
@@ -217,6 +251,24 @@ class SessionStore:
             await self._db.execute(
                 "UPDATE sessions SET last_active_at = ? WHERE session_id = ? AND workspace_id = ?",
                 (_utcnow().isoformat(), session_id, workspace_id),
+            )
+            await self._db.commit()
+
+    async def set_error_code(
+        self, workspace_id: str, session_id: str, error_code: str, error: str = ""
+    ) -> None:
+        """Store error_code in session metadata."""
+        session = await self.get(workspace_id, session_id)
+        if session is None:
+            return
+        meta = dict(session.metadata)
+        meta["error_code"] = error_code
+        if error:
+            meta["error"] = error
+        async with self._lock:
+            await self._db.execute(
+                "UPDATE sessions SET metadata = ? WHERE session_id = ? AND workspace_id = ?",
+                (json.dumps(meta), session_id, workspace_id),
             )
             await self._db.commit()
 
