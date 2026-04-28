@@ -17,7 +17,8 @@ RUN useradd -u 10001 -m atrium && \
 
 WORKDIR /app
 COPY --from=builder /build/dist/*.whl /tmp/
-RUN pip install --no-cache-dir /tmp/*.whl && rm /tmp/*.whl && \
+RUN WHL=$(ls /tmp/*.whl) && \
+    pip install --no-cache-dir "${WHL}[all]" && rm "$WHL" && \
     mkdir -p /app/data && chown -R atrium:atrium /app
 
 USER atrium
