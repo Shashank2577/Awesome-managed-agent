@@ -21,17 +21,17 @@ class SQLiteStorage:
     """aiosqlite-backed storage. Serializes writes through a single lock."""
 
     def __init__(self, db_url: str) -> None:
-        # Strip "sqlite:///" or "sqlite://" prefix
         if db_url == ":memory:":
             self._path = ":memory:"
+        elif db_url.startswith("sqlite:///"):
+            self._path = db_url[len("sqlite:///"):]
+        elif db_url.startswith("sqlite://"):
+            self._path = db_url[len("sqlite://"):]
+        elif db_url.startswith("sqlite:"):
+            self._path = db_url[len("sqlite:"):]
         else:
-            self._path = db_url.lstrip("sqlite:").lstrip("/")
-            if db_url.startswith("sqlite:///"):
-                self._path = db_url[len("sqlite:///"):]
-            elif db_url.startswith("sqlite://"):
-                self._path = db_url[len("sqlite://"):]
-            elif db_url.startswith("sqlite:"):
-                self._path = db_url[len("sqlite:"):]
+            # Plain file path (absolute or relative) — use as-is
+            self._path = db_url
         self._db: aiosqlite.Connection | None = None
         self._lock = asyncio.Lock()
 
