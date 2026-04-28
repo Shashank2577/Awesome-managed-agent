@@ -17,9 +17,11 @@ RUN useradd -u 10001 -m atrium && \
 
 WORKDIR /app
 COPY --from=builder /build/dist/*.whl /tmp/
-RUN pip install --no-cache-dir /tmp/*.whl && rm /tmp/*.whl
+RUN pip install --no-cache-dir /tmp/*.whl && rm /tmp/*.whl && \
+    mkdir -p /app/data && chown -R atrium:atrium /app
 
 USER atrium
+ENV ATRIUM_DATA_DIR=/app/data
 EXPOSE 8080
 ENV PYTHONUNBUFFERED=1
 

@@ -57,7 +57,8 @@ def get_thread_store() -> Optional[ThreadStore]:
     return _thread_store
 
 
-_DEV_KEY_FILE = Path("atrium_dev_key.txt")
+_DATA_DIR = Path(os.getenv("ATRIUM_DATA_DIR", "."))
+_DEV_KEY_FILE = _DATA_DIR / "atrium_dev_key.txt"
 
 
 async def _bootstrap_dev_workspace(app_state: "AppState", logger: logging.Logger) -> Optional[str]:
@@ -89,9 +90,9 @@ def create_app(
     registry: Optional[AgentRegistry] = None,
     llm_config: Optional[str] = None,
     guardrails: Optional[GuardrailsConfig] = None,
-    db_path: str = "atrium_agents.db",
-    events_db_path: str = "atrium_events.db",
-    threads_db_path: str = "atrium_threads.db",
+    db_path: str = str(_DATA_DIR / "atrium_agents.db"),
+    events_db_path: str = str(_DATA_DIR / "atrium_events.db"),
+    threads_db_path: str = str(_DATA_DIR / "atrium_threads.db"),
 ) -> FastAPI:
     """Create and configure the Atrium FastAPI application.
 
@@ -107,6 +108,9 @@ def create_app(
         Configured ``FastAPI`` application instance.
     """
     global _registry, _recorder, _orchestrator, _agent_store, _thread_store
+
+    # Ensure data directory exists (matters inside Docker where it may be a new volume)
+    _DATA_DIR.mkdir(parents=True, exist_ok=True)
 
     # Structured JSON logging from startup
     log_level = os.getenv("ATRIUM_LOG_LEVEL", "INFO")
@@ -187,13 +191,13 @@ def create_app(
 
     app_state = AppState(
         config=get_config(),
-        storage=SQLiteStorage("atrium.db"),
-        workspace_store=WorkspaceStore("atrium.db"),  # accepts str path directly
+        storage=SQLiteStorage(str(_DATA_DIR / "atrium.db")),
+        workspace_store=WorkspaceStore(str(_DATA_DIR / "atrium.db")),
         thread_store=_thread_store,
         agent_store=_agent_store,
         recorder=_recorder,
-        mcp_server_store=MCPServerStore("atrium_mcp.db"),
-        session_store=SessionStore("atrium_sessions.db"),
+        mcp_server_store=MCPServerStore(str(_DATA_DIR / "atrium_mcp.db")),
+        session_store=SessionStore(str(_DATA_DIR / "atrium_sessions.db")),
     )
     app.state.atrium = app_state
     AppState.set_instance(app_state)
