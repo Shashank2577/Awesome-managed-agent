@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import re
 from decimal import Decimal
@@ -71,7 +72,6 @@ class LLMClient:
             api_key = os.getenv("GEMINI_API_KEY") or os.getenv("GOOGLE_API_KEY")
             kwargs: dict[str, Any] = {
                 "model": self._model or "gemini-2.5-flash",
-                "generation_config": {"response_mime_type": "application/json"},
             }
             if api_key:
                 kwargs["google_api_key"] = api_key
@@ -90,7 +90,7 @@ class LLMClient:
             "total_tokens": int(meta.get("total_tokens", 0)),
         }
 
-    async def generate_text(self, system_prompt: str, user_prompt: str) -> str:
+    async def generate_text(self, system_prompt: str, user_prompt: str, timeout: float = 60.0) -> str:
         """Send a system+user prompt and return the raw text response."""
         model = self._get_chat_model()
         messages = [
@@ -99,7 +99,7 @@ class LLMClient:
         ]
 
         async def _call():
-            return await model.ainvoke(messages)
+            return await asyncio.wait_for(model.ainvoke(messages), timeout=timeout)
 
         response = await async_retry(_call, max_attempts=3)
         return response.content.strip()
