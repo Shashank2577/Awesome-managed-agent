@@ -139,6 +139,15 @@ def create_app(
 
     _guardrails = guardrails or GuardrailsConfig()
 
+    # Auto-detect LLM provider from env vars when none was passed explicitly
+    if llm_config is None:
+        if os.getenv("GEMINI_API_KEY"):
+            llm_config = f"google:{os.getenv('GEMINI_MODEL', 'gemini-2.5-flash')}"
+        elif os.getenv("OPENAI_API_KEY"):
+            llm_config = "openai:gpt-4o-mini"
+        elif os.getenv("ANTHROPIC_API_KEY"):
+            llm_config = "anthropic:claude-haiku-4-5-20251001"
+
     if llm_config is not None:
         _orchestrator = ThreadOrchestrator(
             registry=_registry,
