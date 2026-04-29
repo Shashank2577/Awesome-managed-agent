@@ -138,12 +138,50 @@
             <label class="runtime-label">Runtime</label>
             <select id="runtimeSelect" class="runtime-select">
               <option value="echo">echo — demo (no API key)</option>
-              <option value="direct_gemini">direct_gemini — Gemini 2.5 Flash</option>
-              <option value="direct_anthropic">direct_anthropic — Claude</option>
-              <option value="open_agent_sdk">open_agent_sdk — OpenAI</option>
-              <option value="openclaude">openclaude — Claude Code</option>
+              <option value="direct_gemini">direct_gemini — Gemini (server env)</option>
+              <option value="universal" selected>universal — any provider (configure below)</option>
+              <option value="direct_anthropic">direct_anthropic — Anthropic (server env)</option>
+              <option value="openclaude">openclaude — Claude extended thinking</option>
             </select>
-            <span class="muted" id="runtimeHint" style="font-size:11px; margin-left:6px;">No API key needed</span>
+            <span class="muted" id="runtimeHint" style="font-size:11px; margin-left:6px;"></span>
+          </div>
+
+          <!-- Provider config panel — shown only for universal runtime -->
+          <div id="providerPanel" style="background:var(--surface2,#1e1e2e);border:1px solid var(--border,#313244);border-radius:6px;padding:10px 12px;margin-bottom:8px;display:grid;gap:6px;">
+            <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px;">
+              <label style="font-size:11px;font-weight:600;color:var(--muted,#6c7086);letter-spacing:.05em;">PROVIDER PRESET</label>
+              <select id="providerPreset" style="font-size:12px;padding:2px 6px;background:var(--surface3,#313244);border:1px solid var(--border,#45475a);border-radius:4px;color:inherit;flex:1;">
+                <option value="">— custom —</option>
+                <option value="openrouter">OpenRouter (all models)</option>
+                <option value="openai">OpenAI</option>
+                <option value="gemini">Google Gemini</option>
+                <option value="xai">xAI / Grok</option>
+                <option value="nvidia">NVIDIA NIM</option>
+                <option value="groq">Groq</option>
+                <option value="ollama">Ollama (local)</option>
+              </select>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
+              <div>
+                <label style="font-size:10px;color:var(--muted,#6c7086);">BASE URL</label>
+                <input id="providerBaseUrl" type="text" placeholder="https://openrouter.ai/api/v1"
+                  style="width:100%;font-size:12px;padding:4px 6px;background:var(--surface3,#313244);border:1px solid var(--border,#45475a);border-radius:4px;color:inherit;box-sizing:border-box;" />
+              </div>
+              <div>
+                <label style="font-size:10px;color:var(--muted,#6c7086);">API KEY</label>
+                <input id="providerApiKey" type="password" placeholder="sk-or-… / AIza… / sk-…"
+                  style="width:100%;font-size:12px;padding:4px 6px;background:var(--surface3,#313244);border:1px solid var(--border,#45475a);border-radius:4px;color:inherit;box-sizing:border-box;" />
+              </div>
+            </div>
+            <div>
+              <label style="font-size:10px;color:var(--muted,#6c7086);">MODEL</label>
+              <input id="providerModel" type="text" placeholder="e.g. anthropic/claude-sonnet-4-5  or  gpt-4o-mini  or  gemini-2.5-flash"
+                style="width:100%;font-size:12px;padding:4px 6px;background:var(--surface3,#313244);border:1px solid var(--border,#45475a);border-radius:4px;color:inherit;box-sizing:border-box;" />
+            </div>
+            <div style="display:flex;align-items:center;justify-content:space-between;">
+              <span style="font-size:10px;color:var(--muted,#6c7086);">Keys stored in browser only — never sent to server except during a session run</span>
+              <button id="saveProviderBtn" class="btn small" style="font-size:11px;padding:2px 10px;" type="button">Save</button>
+            </div>
           </div>
           <form class="composer-inner" id="composer">
             <input id="composerInput" type="text" autocomplete="off"

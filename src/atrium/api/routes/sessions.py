@@ -41,6 +41,15 @@ _PAUSE_TIMEOUT = 30.0
 _SSE_HEARTBEAT = 15.0
 
 
+class ProviderConfig(BaseModel):
+    """LLM provider configuration — sent from the UI, never stored server-side."""
+
+    base_url: str = Field("", description="OpenAI-compatible base URL")
+    api_key: str = Field("", description="API key for the provider")
+    model: str = Field("", description="Model identifier as the provider expects")
+    system_prompt: str = Field("", description="Optional system prompt override")
+
+
 class CreateSessionRequest(BaseModel):
     """Body for POST /api/v1/sessions."""
 
@@ -49,8 +58,9 @@ class CreateSessionRequest(BaseModel):
     model_override: Optional[str] = Field(None, description="Override model (e.g. google:gemini-2.5-pro)")
     timeout_seconds: int = Field(1800, ge=60, le=86400)
     metadata: dict = Field(default_factory=dict)
-    runtime: str = Field("echo", description="Runtime name: echo | open_agent_sdk | direct_anthropic | openclaude")
+    runtime: str = Field("echo", description="Runtime name: echo | universal | direct_anthropic | openclaude")
     model: str = Field("echo:test")
+    provider: Optional[ProviderConfig] = Field(None, description="LLM provider config (for universal runtime)")
 
 
 class SessionResponse(BaseModel):
@@ -282,6 +292,11 @@ async def create_session(
         asyncio.create_task(
             _run_harness_session(session, workspace.workspace_id, req.objective, req.runtime, req.model_override or req.model, state)
         )
+    elif req.runtime == "universal":
+        asyncio.create_task(
+            _run_harness_session(session, workspace.workspace_id, req.objective, "universal",
+                                 req.model_override or req.model, state, provider=req.provider)
+        )
 
     return _sess_response(session)
 
@@ -375,6 +390,7 @@ async def _run_harness_session(
     runtime_name: str,
     model: str,
     state: "AppState",
+    provider: "ProviderConfig | None" = None,
 ) -> None:
     """Drive a real sandbox session via DockerSandboxRunner + BridgeStream."""
     import os
@@ -389,6 +405,7 @@ async def _run_harness_session(
         "direct_anthropic": "atrium.harness.runtimes.direct_anthropic:DirectAnthropicRuntime",
         "open_agent_sdk": "atrium.harness.runtimes.open_agent_sdk:OpenAgentSDKRuntime",
         "openclaude": "atrium.harness.runtimes.openclaude:OpenClaudeRuntime",
+        "universal": "atrium.harness.runtimes.universal:UniversalRuntime",
     }
 
     async def emit(t: str, p: dict) -> None:
@@ -401,12 +418,23 @@ async def _run_harness_session(
         mod = importlib.import_module(mod_path)
         runtime = getattr(mod, cls_name)()
 
-        # Collect required env vars
+        # Collect env vars from server environment
         env: dict[str, str] = {}
         for env_key in runtime.required_env(model):
             val = os.environ.get(env_key, "")
             if val:
                 env[env_key] = val
+
+        # For universal runtime: provider config from the request overrides server env
+        if runtime_name == "universal" and provider:
+            if provider.base_url:
+                env["LLM_BASE_URL"] = provider.base_url
+            if provider.api_key:
+                env["LLM_API_KEY"] = provider.api_key
+            # Model: prefer provider.model, fall back to session model arg
+            env["LLM_MODEL"] = provider.model or model
+            if provider.system_prompt:
+                env["LLM_SYSTEM_PROMPT"] = provider.system_prompt
 
         # Pick backend (docker or kubernetes based on env)
         backend = os.getenv("ATRIUM_SANDBOX_BACKEND", "docker")

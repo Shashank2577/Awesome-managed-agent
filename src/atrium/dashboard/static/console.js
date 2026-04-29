@@ -53,26 +53,105 @@ async function api(path, init = {}) {
 const RUNTIME_MODELS = {
   echo: "echo:test",
   direct_gemini: "gemini:gemini-2.5-flash",
+  universal: "universal:configured",
   direct_anthropic: "anthropic:claude-haiku-4-5-20251001",
-  open_agent_sdk: "openai:gpt-4o-mini",
   openclaude: "anthropic:claude-sonnet-4-6",
 };
 
 const RUNTIME_HINTS = {
   echo: "No API key needed — simulates a full agent run",
   direct_gemini: "Calls Gemini server-side — requires GEMINI_API_KEY in server env",
+  universal: "Configure any provider below — OpenRouter, OpenAI, Gemini, xAI, NVIDIA, Groq, Ollama…",
   direct_anthropic: "Requires ANTHROPIC_API_KEY in server env",
-  open_agent_sdk: "Requires OPENAI_API_KEY + running sandbox",
-  openclaude: "Requires ANTHROPIC_API_KEY + running sandbox",
+  openclaude: "Requires ANTHROPIC_API_KEY + sandbox (extended thinking)",
 };
+
+// Provider presets for the universal runtime
+const PROVIDER_PRESETS = {
+  openrouter: { base_url: "https://openrouter.ai/api/v1",                                  model: "anthropic/claude-sonnet-4-5" },
+  openai:     { base_url: "https://api.openai.com/v1",                                     model: "gpt-4o-mini" },
+  gemini:     { base_url: "https://generativelanguage.googleapis.com/v1beta/openai/",       model: "gemini-2.5-flash" },
+  xai:        { base_url: "https://api.x.ai/v1",                                           model: "grok-3-mini" },
+  nvidia:     { base_url: "https://integrate.api.nvidia.com/v1",                           model: "meta/llama-3.3-70b-instruct" },
+  groq:       { base_url: "https://api.groq.com/openai/v1",                               model: "llama-3.3-70b-versatile" },
+  ollama:     { base_url: "http://localhost:11434/v1",                                     model: "llama3.2" },
+};
+
+function loadProviderConfig() {
+  try { return JSON.parse(localStorage.getItem("atrium_provider") || "{}"); }
+  catch (_) { return {}; }
+}
+
+function saveProviderConfig(cfg) {
+  localStorage.setItem("atrium_provider", JSON.stringify(cfg));
+}
+
+function applyProviderPreset(name) {
+  const p = PROVIDER_PRESETS[name];
+  if (!p) return;
+  const saved = loadProviderConfig();
+  $("#providerBaseUrl").value = p.base_url;
+  $("#providerModel").value = p.model;
+  // Keep saved API key for this preset if available, otherwise keep whatever is in the field
+  const key = saved[name + "_key"] || $("#providerApiKey").value || "";
+  $("#providerApiKey").value = key;
+}
 
 function wireRuntimeSelector() {
   const sel = $("#runtimeSelect");
   const hint = $("#runtimeHint");
+  const panel = $("#providerPanel");
   if (!sel || !hint) return;
-  sel.addEventListener("change", () => {
+
+  function updatePanel() {
+    const isUniversal = sel.value === "universal";
+    if (panel) panel.style.display = isUniversal ? "grid" : "none";
     hint.textContent = RUNTIME_HINTS[sel.value] || "";
-  });
+  }
+
+  sel.addEventListener("change", updatePanel);
+
+  // Preset selector
+  const presetSel = $("#providerPreset");
+  if (presetSel) {
+    presetSel.addEventListener("change", () => {
+      if (presetSel.value) applyProviderPreset(presetSel.value);
+    });
+  }
+
+  // Save button
+  const saveBtn = $("#saveProviderBtn");
+  if (saveBtn) {
+    saveBtn.addEventListener("click", () => {
+      const cfg = loadProviderConfig();
+      const preset = presetSel?.value || "";
+      if (preset) cfg[preset + "_key"] = $("#providerApiKey").value;
+      cfg._last = {
+        base_url: $("#providerBaseUrl").value,
+        api_key: $("#providerApiKey").value,
+        model: $("#providerModel").value,
+        preset,
+      };
+      saveProviderConfig(cfg);
+      saveBtn.textContent = "Saved ✓";
+      setTimeout(() => { saveBtn.textContent = "Save"; }, 1500);
+    });
+  }
+
+  // Restore last saved config
+  const saved = loadProviderConfig();
+  if (saved._last) {
+    const last = saved._last;
+    if (last.preset && presetSel) presetSel.value = last.preset;
+    if ($("#providerBaseUrl")) $("#providerBaseUrl").value = last.base_url || "";
+    if ($("#providerApiKey")) $("#providerApiKey").value = last.api_key || "";
+    if ($("#providerModel")) $("#providerModel").value = last.model || "";
+  } else {
+    // Default to OpenRouter preset
+    if (presetSel) { presetSel.value = "openrouter"; applyProviderPreset("openrouter"); }
+  }
+
+  updatePanel();
 }
 
 // ---------------------------------------------------------------
@@ -715,9 +794,18 @@ async function createSession(objective) {
   const runtime = $("#runtimeSelect")?.value || "echo";
   const model = RUNTIME_MODELS[runtime] || "echo:test";
 
+  const body = { objective, runtime, model, timeout_seconds: 1800 };
+
+  if (runtime === "universal") {
+    const base_url = $("#providerBaseUrl")?.value?.trim() || "";
+    const api_key = $("#providerApiKey")?.value?.trim() || "";
+    const provModel = $("#providerModel")?.value?.trim() || "";
+    body.provider = { base_url, api_key, model: provModel };
+  }
+
   const data = await api("/api/v1/sessions", {
     method: "POST",
-    body: JSON.stringify({ objective, runtime, model, timeout_seconds: 1800 }),
+    body: JSON.stringify(body),
   });
 
   const view = new ThreadView(data.session_id, data.title || `Session: ${runtime}`, objective);
