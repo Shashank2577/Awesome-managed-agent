@@ -88,13 +88,31 @@ docker-compose.yml adds the atrium user to root group so it can access the socke
 
 ## Runtime → event format mapping
 
-| Runtime            | Container image              | Event format            |
-|--------------------|------------------------------|-------------------------|
-| `direct_anthropic` | `atrium/anthropic:0.1.0`     | `claude_code_stream_json` |
-| `open_agent_sdk`   | `atrium/open-agent-sdk:0.1.0`| `claude_code_stream_json` |
-| `openclaude`       | `atrium/openclaude:0.1.0`    | `claude_code_stream_json` (+ thinking) |
-| `direct_gemini`    | (in-process)                 | in-process events       |
-| `echo`             | (in-process subprocess)      | `echo`                  |
+| Runtime            | Container image              | Provider           | Event format              |
+|--------------------|------------------------------|--------------------|---------------------------|
+| `universal`        | `atrium/universal:0.1.0`     | **any** (UI-configured) | `claude_code_stream_json` |
+| `direct_anthropic` | `atrium/anthropic:0.1.0`     | Anthropic only     | `claude_code_stream_json` |
+| `openclaude`       | `atrium/openclaude:0.1.0`    | Anthropic (extended thinking) | `claude_code_stream_json` |
+| `direct_gemini`    | (in-process)                 | Gemini (server env) | in-process events        |
+| `echo`             | (in-process subprocess)      | none               | `echo`                    |
+
+## Universal runtime — provider presets (UI)
+
+Select "universal" in the runtime dropdown. A provider panel appears:
+
+| Preset      | Base URL                                                  | Notes                        |
+|-------------|-----------------------------------------------------------|------------------------------|
+| OpenRouter  | `https://openrouter.ai/api/v1`                            | 100+ models from all vendors |
+| OpenAI      | `https://api.openai.com/v1`                               | GPT-4o, o1, o3               |
+| Gemini      | `https://generativelanguage.googleapis.com/v1beta/openai/`| Gemini 2.5 Flash/Pro         |
+| xAI         | `https://api.x.ai/v1`                                     | Grok-3, Grok-3-mini          |
+| NVIDIA NIM  | `https://integrate.api.nvidia.com/v1`                     | Llama, Nemotron              |
+| Groq        | `https://api.groq.com/openai/v1`                          | Llama, Mixtral (fast)        |
+| Ollama      | `http://localhost:11434/v1`                               | Local models, no API key     |
+
+API keys are stored in browser localStorage only — never persisted server-side.
+They are sent in the session creation request body and forwarded to the sandbox
+container env at runtime only.
 
 ## What was fixed to get here (session log)
 
