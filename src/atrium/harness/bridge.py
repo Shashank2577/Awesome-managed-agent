@@ -207,7 +207,10 @@ def _budget_draft(usage: dict, model: str) -> AtriumEventDraft:
 
 def _extract_usage(event: dict) -> dict | None:
     """Pull usage dict from an assistant message, if present."""
-    return event.get("message", {}).get("usage")
+    msg = event.get("message")
+    if not isinstance(msg, dict):
+        return None
+    return msg.get("usage")
 
 
 # ---------------------------------------------------------------------------
@@ -232,6 +235,7 @@ class BridgeStream:
         recorder: "EventRecorder",
         artifact_store: "ArtifactStore",
         guardrails: GuardrailEnforcer,
+        event_format: str = "echo",
     ) -> None:
         self._sandbox = sandbox
         self._session = session
@@ -242,10 +246,7 @@ class BridgeStream:
         self._tokens_out = 0
         self._tokens_used = 0
         self._cost_usd = 0.0
-        # Pick translator from session runtime name → event_format
-        fmt = getattr(session, "runtime", "echo")
-        # Allow the runtime object to declare its format if available
-        self._translator = _TRANSLATORS.get(fmt, translate_echo)
+        self._translator = _TRANSLATORS.get(event_format, translate_echo)
 
     def _translate(self, event: dict) -> list[AtriumEventDraft]:
         translator = self._translator
@@ -325,6 +326,10 @@ class BridgeStream:
             self._apply_guardrails(event)
 
             if event.get("type") == "result":
+                if event.get("subtype") == "error":
+                    raise RuntimeError(
+                        event.get("message") or event.get("error") or "sandbox error"
+                    )
                 result_event = event
                 break
 

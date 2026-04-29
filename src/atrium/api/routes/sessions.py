@@ -435,6 +435,7 @@ async def _run_harness_session(
             env=env,
             limits=limits,
             network_policy=policy,
+            objective=objective,
         )
 
         if sess_store:
@@ -443,7 +444,8 @@ async def _run_harness_session(
         artifact_store = ArtifactStore(":memory:")
         await artifact_store.open()
         guardrails = GuardrailEnforcer(max_tool_calls=200)
-        bridge = BridgeStream(sandbox, session, rec, artifact_store, guardrails)
+        bridge = BridgeStream(sandbox, session, rec, artifact_store, guardrails,
+                              event_format=runtime.event_format)
 
         try:
             result = await asyncio.wait_for(bridge.run(objective), timeout=1800)
@@ -457,6 +459,9 @@ async def _run_harness_session(
             await sandbox.stop()
 
     except Exception as exc:
+        import traceback
+        import logging
+        logging.getLogger(__name__).error("Harness session failed: %s", traceback.format_exc())
         await emit("THREAD_FAILED", {"error": str(exc)})
         if sess_store:
             try:

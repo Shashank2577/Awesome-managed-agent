@@ -25,10 +25,13 @@ async function main() {
     try { systemPrompt = require('fs').readFileSync(systemPromptPath, 'utf8'); } catch (_) {}
   }
 
-  const rl = readline.createInterface({ input: process.stdin, terminal: false });
-  const objective = await new Promise(resolve => {
-    rl.once('line', line => { rl.close(); resolve(line.trim()); });
-  });
+  let objective = (process.env.ATRIUM_OBJECTIVE || '').trim();
+  if (!objective) {
+    const rl = readline.createInterface({ input: process.stdin, terminal: false });
+    objective = await new Promise(resolve => {
+      rl.once('line', line => { rl.close(); resolve(line.trim()); });
+    });
+  }
 
   const client = new Anthropic.Anthropic();
   emit({ type: 'system', subtype: 'init', model });
@@ -64,6 +67,6 @@ async function main() {
 }
 
 main().catch(err => {
-  process.stderr.write(String(err) + '\n');
+  process.stdout.write(JSON.stringify({ type: 'result', subtype: 'error', message: String(err) }) + '\n');
   process.exit(1);
 });

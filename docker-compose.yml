@@ -13,9 +13,11 @@ services:
       GEMINI_MODEL: "${GEMINI_MODEL:-gemini-2.5-flash}"
       ATRIUM_SANDBOX_BACKEND: "docker"
       ATRIUM_SANDBOX_REGISTRY: "${ATRIUM_SANDBOX_REGISTRY:-atrium}"
+    group_add:
+      - "0"
     volumes:
       - atrium_data:/app/data
-      - /var/run/docker.sock:/var/run/docker.sock
+      - ${DOCKER_SOCK:-/var/run/docker.sock}:/var/run/docker.sock
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8080/api/v1/health"]
       interval: 10s

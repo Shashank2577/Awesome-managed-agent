@@ -41,6 +41,7 @@ class SandboxRunner(abc.ABC):
         env: dict[str, str],
         limits: ResourceLimits,
         network_policy: NetworkPolicy,
+        objective: str | None = None,
     ) -> "SandboxRunner": ...
 
     @abc.abstractmethod
@@ -80,12 +81,16 @@ class InMemorySandboxRunner(SandboxRunner):
         env: dict[str, str],
         limits: ResourceLimits,
         network_policy: NetworkPolicy,
+        objective: str | None = None,
     ) -> "InMemorySandboxRunner":
         # Find the echo_runtime.py script next to echo.py in the runtimes package
         runtimes_dir = Path(__file__).parent / "runtimes"
         script_path = runtimes_dir / "echo_runtime.py"
 
-        merged_env = {**os.environ, **env, "ATRIUM_WORKSPACE_DIR": str(session.workspace_dir)}
+        extra = {"ATRIUM_WORKSPACE_DIR": str(session.workspace_dir)}
+        if objective:
+            extra["ATRIUM_OBJECTIVE"] = objective
+        merged_env = {**os.environ, **env, **extra}
 
         proc = await asyncio.create_subprocess_exec(
             sys.executable,
@@ -151,6 +156,7 @@ class DockerSandboxRunner(SandboxRunner):
         env: dict[str, str],
         limits: ResourceLimits,
         network_policy: NetworkPolicy,
+        objective: str | None = None,
         registry: str = "atrium",
         mcp_socket_path: str | None = None,
         session_token: str | None = None,
@@ -167,6 +173,8 @@ class DockerSandboxRunner(SandboxRunner):
 
         env_list = [f"{k}={v}" for k, v in env.items()]
         env_list.append("ATRIUM_WORKSPACE_DIR=/workspace")
+        if objective:
+            env_list.append(f"ATRIUM_OBJECTIVE={objective}")
 
         # Phase 4: MCP gateway wiring
         _mcp_socket = "/run/atrium/mcp.sock"
@@ -213,12 +221,8 @@ class DockerSandboxRunner(SandboxRunner):
                 yield line
 
     async def send_input(self, text: str) -> None:
-        await self._container.websocket(stdin=True, stdout=True)
-        # Simplified: uses exec for input
-        exec_inst = await self._container.exec(
-            ["sh", "-c", f"echo {repr(text)}"],
-        )
-        await exec_inst.start()
+        # Objective is passed via ATRIUM_OBJECTIVE env var at container start.
+        pass
 
     async def stop(self, timeout_seconds: float = 10.0) -> None:
         try:

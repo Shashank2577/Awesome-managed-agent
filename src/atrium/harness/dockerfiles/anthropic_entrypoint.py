@@ -1,11 +1,7 @@
 """Inside-the-sandbox entrypoint for the Direct Anthropic runtime.
 
-Reads stdin (first line = objective), drives the Claude agent SDK's async
-iterator, and emits one claude_code_stream_json event per line to stdout.
-No output goes to stdout except JSON event lines; errors go to stderr.
-
-Usage:
-  python anthropic_entrypoint.py [--model MODEL] [--system-prompt-file PATH]
+Reads objective from ATRIUM_OBJECTIVE env var (or first stdin line as fallback),
+drives the Anthropic SDK, and emits claude_code_stream_json events to stdout.
 """
 from __future__ import annotations
 
@@ -15,16 +11,7 @@ import json
 import os
 import sys
 
-# Optional: claude-agent-sdk-python is only installed in the container image.
-try:
-    from claude_agent import ClaudeAgent  # type: ignore[import-not-found]
-except ImportError:
-    ClaudeAgent = None  # type: ignore[misc,assignment]
-
-try:
-    import anthropic as _anthropic_sdk  # type: ignore[import-not-found]
-except ImportError:
-    _anthropic_sdk = None  # type: ignore[assignment]
+import anthropic
 
 
 def emit(event: dict) -> None:
@@ -39,125 +26,58 @@ def _build_parser() -> argparse.ArgumentParser:
     return p
 
 
-async def _run_with_agent_sdk(model: str, system_prompt: str | None, objective: str) -> None:
-    """Drive claude-agent-sdk-python and emit events."""
-    if ClaudeAgent is None:
-        emit({"type": "result", "subtype": "error", "message": "claude-agent-sdk-python not installed"})
-        return
-
-    checkpoint_path = os.environ.get("ATRIUM_CHECKPOINT_PATH")
-    history = None
-    tool_calls_so_far = 0
-
-    if checkpoint_path and os.path.exists(checkpoint_path):
-        try:
-            with open(checkpoint_path, "r") as f:
-                cp = json.load(f)
-                history = cp.get("history")
-                tool_calls_so_far = cp.get("tool_calls_so_far", 0)
-        except Exception as e:
-            print(f"Failed to load checkpoint: {e}", file=sys.stderr)
-
-    agent = ClaudeAgent(
-        model=model,
-        system_prompt=system_prompt,
-        workspace_dir=os.environ.get("ATRIUM_WORKSPACE_DIR", "/workspace"),
-        stream=True,
-        history=history,
-    )
-
-    emit({"type": "system", "subtype": "init", "model": model})
-
-    async for event in agent.run(objective):
-        emit(event)
-        
-        if event.get("type") == "tool_use":
-            tool_calls_so_far += 1
-            if checkpoint_path and tool_calls_so_far % 5 == 0:
-                try:
-                    cp = {
-                        "history": getattr(agent, "get_history", lambda: [])(),
-                        "tool_calls_so_far": tool_calls_so_far,
-                    }
-                    tmp_path = checkpoint_path + ".tmp"
-                    with open(tmp_path, "w") as f:
-                        json.dump(cp, f)
-                    os.rename(tmp_path, checkpoint_path)
-                    emit({
-                        "type": "checkpoint",
-                        "tokens_so_far": 0,
-                        "tool_calls_so_far": tool_calls_so_far,
-                    })
-                except Exception as e:
-                    print(f"Failed to write checkpoint: {e}", file=sys.stderr)
-
-        if event.get("type") == "result":
-            break
-
-
-async def _run_fallback(model: str, system_prompt: str | None, objective: str) -> None:
-    """Fallback: use anthropic SDK directly when claude-agent-sdk not available."""
-    if _anthropic_sdk is None:
-        emit({"type": "result", "subtype": "error", "message": "anthropic SDK not installed"})
-        return
-
-    client = _anthropic_sdk.AsyncAnthropic()
-    emit({"type": "system", "subtype": "init", "model": model})
-
-    messages = [{"role": "user", "content": objective}]
-    system = system_prompt or ""
-
-    async with client.messages.stream(
-        model=model,
-        max_tokens=8192,
-        system=system,
-        messages=messages,
-    ) as stream:
-        async for event in stream:
-            # Map raw anthropic stream events to our format
-            ev_type = type(event).__name__
-            if ev_type == "RawContentBlockDeltaEvent":
-                if hasattr(event, "delta") and hasattr(event.delta, "text"):
-                    emit({
-                        "type": "assistant",
-                        "message": {"content": [{"type": "text", "text": event.delta.text}]},
-                    })
-            elif ev_type == "RawMessageStopEvent":
-                pass
-
-        final = await stream.get_final_message()
-        usage = final.usage
-        emit({
-            "type": "assistant",
-            "message": {
-                "content": [{"type": "text", "text": final.content[0].text if final.content else ""}],
-                "usage": {
-                    "input_tokens": usage.input_tokens,
-                    "output_tokens": usage.output_tokens,
-                },
-            },
-        })
-
-    emit({"type": "result", "subtype": "success", "result": "Done."})
-
-
 async def main() -> int:
     args = _build_parser().parse_args()
-    system_prompt: str | None = None
-    if args.system_prompt_file:
-        with open(args.system_prompt_file) as f:
-            system_prompt = f.read()
 
-    objective = sys.stdin.readline().strip()
+    system_prompt = "You are a capable AI assistant. Reason carefully and complete the objective."
+    if args.system_prompt_file:
+        try:
+            with open(args.system_prompt_file) as f:
+                system_prompt = f.read()
+        except OSError:
+            pass
+
+    objective = os.environ.get("ATRIUM_OBJECTIVE", "").strip()
+    if not objective:
+        objective = sys.stdin.readline().strip()
     if not objective:
         emit({"type": "result", "subtype": "error", "message": "no objective provided"})
         return 1
 
-    if ClaudeAgent is not None:
-        await _run_with_agent_sdk(args.model, system_prompt, objective)
-    else:
-        await _run_fallback(args.model, system_prompt, objective)
+    client = anthropic.AsyncAnthropic()
+    model = args.model
 
+    emit({"type": "system", "subtype": "init", "model": model})
+
+    full_text = ""
+    input_tokens = 0
+    output_tokens = 0
+
+    try:
+        async with client.messages.stream(
+            model=model,
+            max_tokens=8192,
+            system=system_prompt,
+            messages=[{"role": "user", "content": objective}],
+        ) as stream:
+            async for text_chunk in stream.text_stream:
+                full_text += text_chunk
+
+            final = await stream.get_final_message()
+            input_tokens = final.usage.input_tokens
+            output_tokens = final.usage.output_tokens
+    except Exception as exc:
+        emit({"type": "result", "subtype": "error", "message": str(exc)})
+        return 1
+
+    emit({
+        "type": "assistant",
+        "message": {
+            "content": [{"type": "text", "text": full_text}],
+            "usage": {"input_tokens": input_tokens, "output_tokens": output_tokens},
+        },
+    })
+    emit({"type": "result", "subtype": "success", "result": full_text})
     return 0
 
 
