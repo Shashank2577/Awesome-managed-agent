@@ -17,16 +17,14 @@ def _json_default(obj: object) -> str:
 def format_sse(event: AtriumEvent) -> str:
     """Format an AtriumEvent as an SSE chunk.
 
-    Returns a string of the form::
-
-        event: <type>\\n
-        data: <json>\\n
-        \\n
+    Uses unnamed SSE messages so the browser's ``EventSource.onmessage``
+    handler catches every event regardless of race conditions with named
+    listener registration.  The event type lives in the JSON payload.
     """
     data = json.dumps(event.model_dump(), default=_json_default)
-    return f"event: {event.type}\ndata: {data}\n\n"
+    return f"data: {data}\n\n"
 
 
 def format_sse_end() -> str:
     """Return the SSE end-of-stream sentinel chunk."""
-    return "event: end\ndata: {}\n\n"
+    return 'data: {"type":"end"}\n\n'

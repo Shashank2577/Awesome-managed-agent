@@ -1,158 +1,117 @@
 <!doctype html>
 <html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Atrium · Console</title>
-    <link rel="stylesheet" href="/dashboard/static/styles.css" />
-    <link rel="icon" href="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><defs><linearGradient id='g' x1='0' x2='1' y1='0' y2='1'><stop offset='0' stop-color='%237c5cff'/><stop offset='1' stop-color='%2329c0ff'/></linearGradient></defs><rect x='2' y='2' width='20' height='20' rx='6' fill='url(%23g)'/></svg>" />
-  </head>
-  <body>
-    <nav class="nav">
-      <div class="container nav-inner">
-        <a class="brand" href="/">
-          <span class="brand-mark"></span>
-          Atrium
-        </a>
-        <div class="row gap-2 center">
-          <span id="devModeBadge" class="pill" style="display:none; background:rgba(124,92,255,0.15); border:1px solid rgba(124,92,255,0.3);"><span class="dot" style="background:#7c5cff;"></span> dev</span>
-          <span class="pill live" id="streamPill"><span class="dot"></span> idle</span>
-          <button class="btn ghost small" onclick="openMcpModal()">+ MCP Server</button>
-          <button class="btn ghost small" id="newSessionBtn">+ New Session</button>
-        </div>
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Atrium Console</title>
+<link rel="stylesheet" href="/dashboard/static/styles.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><rect x='3' y='3' width='18' height='18' rx='4' fill='%232563EB'/><text x='12' y='17' text-anchor='middle' fill='white' font-size='13' font-weight='700'>A</text></svg>">
+</head>
+<body>
+
+<!-- Nav -->
+<nav class="nav">
+  <a class="nav-brand" href="/">
+    <svg viewBox="0 0 24 24"><rect x="3" y="3" width="18" height="18" rx="4" fill="#2563EB"/><text x="12" y="17" text-anchor="middle" fill="white" font-size="13" font-weight="700">A</text></svg>
+    Atrium
+  </a>
+  <div class="nav-right">
+    <span id="statusBadge" class="nav-badge"><span class="sdot sdot-created"></span> idle</span>
+    <span id="devBadge" class="nav-badge" style="display:none;background:var(--purple-bg);color:var(--purple);border-color:#DDD6FE">dev</span>
+    <button class="btn btn-sm" onclick="switchView('new-run')">+ New Run</button>
+  </div>
+</nav>
+
+<!-- App Shell -->
+<div class="app">
+
+  <!-- Sidebar Navigation -->
+  <aside class="sidebar">
+    <div class="sidebar-nav">
+      <div class="sidebar-label">Navigation</div>
+      <div class="sidebar-item active" data-view="home" onclick="switchView('home')"><span class="si-icon">&#9632;</span> Home</div>
+      <div class="sidebar-item" data-view="agents" onclick="switchView('agents')"><span class="si-icon">&#9672;</span> Agents <span class="si-badge" id="agentCount">0</span></div>
+      <div class="sidebar-item" data-view="runs" onclick="switchView('runs')"><span class="si-icon">&#9776;</span> Runs <span class="si-badge" id="runCount">0</span></div>
+      <div class="sidebar-divider"></div>
+      <div class="sidebar-label">Integrations</div>
+      <div class="sidebar-item" data-view="tools" onclick="switchView('tools')"><span class="si-icon">&#9881;</span> MCP Tools</div>
+    </div>
+
+    <!-- Active run context (shown when a run is active) -->
+    <div style="margin-top:auto;padding:var(--s-2);border-top:1px solid var(--border);display:none" id="sidebarRunContext">
+      <div class="sidebar-label">Active Run</div>
+      <div style="font-size:12.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis" id="sidebarRunTitle">—</div>
+      <div style="font-size:11.5px;color:var(--text-muted);font-family:var(--mono)" id="sidebarRunId">—</div>
+      <div style="margin-top:var(--s)"><span class="badge badge-info" id="sidebarRunStatus">—</span></div>
+    </div>
+  </aside>
+
+  <!-- Main Content Area -->
+  <main class="main">
+
+    <!-- ── HOME PAGE ──────────────────────────────────────── -->
+    <div class="page" id="page-home">
+      <div class="page-header"><div><h2>Overview</h2><p>Your agent orchestration at a glance</p></div><button class="btn btn-primary" onclick="switchView('new-run')">+ New Run</button></div>
+
+      <div class="metric-grid" id="homeMetrics">
+        <div class="metric-card"><div class="m-label">Total Runs</div><div class="m-value" id="metricTotal">0</div></div>
+        <div class="metric-card"><div class="m-label">Success Rate</div><div class="m-value" id="metricSuccess">—</div></div>
+        <div class="metric-card"><div class="m-label">Active Runs</div><div class="m-value" id="metricActive">0</div></div>
+        <div class="metric-card"><div class="m-label">Total Spent</div><div class="m-value" id="metricSpent">$0.00</div></div>
       </div>
-    </nav>
 
-    <main class="app-shell">
-      <!-- Left rail: sessions + agent library -->
-      <aside class="left-rail">
-        <div class="rail-head">
-          <span class="title">Sessions</span>
-          <span class="muted mono" id="sessionCount">0</span>
-        </div>
-        <div class="rail-body" id="sessionList"></div>
+      <div class="card"><div class="card-header"><h4>Recent Runs</h4></div>
+      <div class="table-wrap"><table><thead><tr><th>Objective</th><th>Runtime</th><th>Status</th><th>Duration</th><th>Created</th></tr></thead><tbody id="recentRunsTable"><tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:var(--s-4)">No runs yet. <a href="#" onclick="switchView('new-run');return false">Create your first run</a>.</td></tr></tbody></table></div>
+      </div>
+    </div>
 
-        <div class="rail-divider"></div>
+    <!-- ── AGENTS PAGE ────────────────────────────────────── -->
+    <div class="page" id="page-agents" style="display:none">
+      <div class="page-header"><div><h2>Agents</h2><p>Configured agent templates and connected tools</p></div></div>
+      <div id="agentsList"><div class="empty"><h3>No agents configured</h3><p>Register MCP servers to make tools available to your agents.</p><button class="btn btn-primary btn-sm" onclick="openMcpModal()">Register MCP Server</button></div></div>
+    </div>
 
-        <div class="rail-head">
-          <span class="title">Agent Library</span>
-          <span class="muted mono" id="agentCount">0</span>
-        </div>
-        <div id="category-filter-row" class="category-filter-row"></div>
-        <div class="rail-body" id="agentList"></div>
-      </aside>
+    <!-- ── RUNS PAGE ──────────────────────────────────────── -->
+    <div class="page" id="page-runs" style="display:none">
+      <div class="page-header"><div><h2>Runs</h2><p>History of all agent sessions</p></div></div>
+      <div class="table-wrap"><table><thead><tr><th>Objective</th><th>Runtime</th><th>Status</th><th>Duration</th><th>Cost</th><th>Created</th></tr></thead><tbody id="allRunsTable"><tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:var(--s-4)">No runs yet.</td></tr></tbody></table></div>
+    </div>
 
-      <!-- Center: transcript + composer -->
-      <section class="center-pane">
-        <div class="thread-head">
-          <div class="col gap-1" style="min-width:0;">
-            <div class="t-title" id="threadTitle">Atrium Sandbox</div>
-            <div class="muted mono" id="threadObjective" style="font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">
-              Select a runtime, describe a goal, and deploy an isolated execution sandbox.
-            </div>
-          </div>
-          <div class="controls">
-            <button class="btn ghost small" id="pauseBtn" disabled>Pause</button>
-            <button class="btn ghost small" id="resumeBtn" disabled>Resume</button>
-            <button class="btn ghost small" id="cancelBtn" disabled>Cancel</button>
-          </div>
-        </div>
+    <!-- ── TOOLS PAGE ──────────────────────────────────────── -->
+    <div class="page" id="page-tools" style="display:none">
+      <div class="page-header"><div><h2>MCP Tools</h2><p>Model Context Protocol servers connected to your agents</p></div><button class="btn btn-primary btn-sm" onclick="openMcpModal()">+ Register Server</button></div>
+      <div id="toolsList"><div class="empty"><h3>No MCP servers registered</h3><p>Connect external tools — databases, APIs, GitHub — to your agents via MCP.</p><button class="btn btn-primary btn-sm" onclick="openMcpModal()">Register MCP Server</button></div></div>
+    </div>
 
-        <div class="transcript" id="transcript">
-          <!-- Welcome panel — hidden after first session is created -->
-          <div id="welcomePanel" class="welcome-panel">
-            <div class="welcome-logo">
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="56" height="56">
-                <defs>
-                  <linearGradient id="wg" x1="0" x2="1" y1="0" y2="1">
-                    <stop offset="0" stop-color="#7c5cff"/>
-                    <stop offset="1" stop-color="#29c0ff"/>
-                  </linearGradient>
-                </defs>
-                <rect x="4" y="4" width="40" height="40" rx="12" fill="url(#wg)"/>
-                <text x="24" y="33" text-anchor="middle" fill="white" font-size="24" font-family="monospace" font-weight="bold">A</text>
-              </svg>
-            </div>
-            <h2 class="welcome-title">Atrium Orchestration Platform</h2>
-            <p class="welcome-sub">Run AI agents in isolated sandboxes. Stream results in real time. Keep humans in the loop.</p>
+    <!-- ── NEW RUN PAGE ────────────────────────────────────── -->
+    <div class="page" id="page-new-run" style="display:none">
+      <div class="page-header"><div><h2>New Run</h2><p>Configure and deploy an agent</p></div><div><button class="btn btn-ghost btn-sm" onclick="switchView('home')">Cancel</button></div></div>
 
-            <div class="capability-grid">
-              <div class="cap-card">
-                <div class="cap-icon">⬡</div>
-                <div class="cap-body">
-                  <div class="cap-title">Sandbox Execution</div>
-                  <div class="cap-desc">Agent code runs in ephemeral Docker containers with hard resource limits and network isolation.</div>
-                </div>
-              </div>
-              <div class="cap-card">
-                <div class="cap-icon">⇌</div>
-                <div class="cap-body">
-                  <div class="cap-title">Multi-Runtime</div>
-                  <div class="cap-desc">Choose Echo (demo), Direct Anthropic Claude, or OpenAI Agents SDK as your execution backend.</div>
-                </div>
-              </div>
-              <div class="cap-card">
-                <div class="cap-icon">⊞</div>
-                <div class="cap-body">
-                  <div class="cap-title">MCP Integration</div>
-                  <div class="cap-desc">Connect external data sources — SQL, GitHub, REST APIs — via the Model Context Protocol.</div>
-                </div>
-              </div>
-              <div class="cap-card">
-                <div class="cap-icon">◎</div>
-                <div class="cap-body">
-                  <div class="cap-title">Human-in-the-Loop</div>
-                  <div class="cap-desc">Pause execution, review the plan, and approve or redirect at any checkpoint.</div>
-                </div>
-              </div>
-            </div>
-
-            <div class="welcome-runtime-guide">
-              <div class="runtime-guide-title">Available Runtimes</div>
-              <div class="runtime-guide-grid">
-                <div class="runtime-guide-row">
-                  <span class="runtime-badge echo">echo</span>
-                  <span class="runtime-guide-desc">Demo mode — no API key needed. Simulates a full agent run with live streaming.</span>
-                </div>
-                <div class="runtime-guide-row">
-                  <span class="runtime-badge gemini">direct_gemini</span>
-                  <span class="runtime-guide-desc">Real Gemini 2.5 Flash calls, server-side. Set <code>GEMINI_API_KEY</code> — no sandbox needed.</span>
-                </div>
-                <div class="runtime-guide-row">
-                  <span class="runtime-badge anthropic">direct_anthropic</span>
-                  <span class="runtime-guide-desc">Real Claude agents via Anthropic SDK. Requires <code>ANTHROPIC_API_KEY</code>.</span>
-                </div>
-                <div class="runtime-guide-row">
-                  <span class="runtime-badge openai">open_agent_sdk</span>
-                  <span class="runtime-guide-desc">OpenAI Agents SDK. Requires <code>OPENAI_API_KEY</code> and a running sandbox.</span>
-                </div>
-              </div>
-            </div>
-
-            <p class="welcome-hint">Type a goal below or pick a quick-start ↓</p>
-          </div>
+      <div class="run-setup">
+        <!-- Step 1: Objective -->
+        <div class="step-section">
+          <div class="step-label">Step 1 &middot; Objective</div>
+          <textarea id="newRunObjective" placeholder="Describe what you want the agent to do. Be specific — the agent will use this as its task description."></textarea>
+          <div class="form-hint">Example: "Research the top 3 most cited AI safety papers from 2025, summarize each, and list their key findings."</div>
         </div>
 
-        <div class="composer">
-          <div class="runtime-selector-row">
-            <label class="runtime-label">Runtime</label>
-            <select id="runtimeSelect" class="runtime-select">
-              <option value="echo">echo — demo (no API key)</option>
-              <option value="direct_gemini">direct_gemini — Gemini (server env)</option>
-              <option value="universal" selected>universal — any provider (configure below)</option>
-              <option value="direct_anthropic">direct_anthropic — Anthropic (server env)</option>
-              <option value="openclaude">openclaude — Claude extended thinking</option>
-            </select>
-            <span class="muted" id="runtimeHint" style="font-size:11px; margin-left:6px;"></span>
-          </div>
-
-          <!-- Provider config panel — shown only for universal runtime -->
-          <div id="providerPanel" style="background:var(--surface2,#1e1e2e);border:1px solid var(--border,#313244);border-radius:6px;padding:10px 12px;margin-bottom:8px;display:grid;gap:6px;">
-            <div style="display:flex;align-items:center;gap:8px;margin-bottom:2px;">
-              <label style="font-size:11px;font-weight:600;color:var(--muted,#6c7086);letter-spacing:.05em;">PROVIDER PRESET</label>
-              <select id="providerPreset" style="font-size:12px;padding:2px 6px;background:var(--surface3,#313244);border:1px solid var(--border,#45475a);border-radius:4px;color:inherit;flex:1;">
-                <option value="">— custom —</option>
-                <option value="openrouter">OpenRouter (all models)</option>
+        <!-- Step 2: Runtime & Model -->
+        <div class="step-section">
+          <div class="step-label">Step 2 &middot; Runtime &amp; Model</div>
+          <div class="form-row">
+            <div class="form-group"><label>Runtime</label>
+              <select id="newRunRuntime">
+                <option value="echo">Echo — demo (no API key)</option>
+                <option value="direct_gemini">Direct Gemini — Gemini 2.5 Flash</option>
+                <option value="direct_anthropic">Direct Anthropic — Claude</option>
+                <option value="open_agent_sdk">OpenAI Agents SDK — GPT</option>
+                <option value="universal" selected>Universal — any provider</option>
+              </select>
+            </div>
+            <div class="form-group"><label>Provider Preset</label>
+              <select id="newRunPreset">
+                <option value="deepseek">DeepSeek</option>
+                <option value="openrouter">OpenRouter</option>
                 <option value="openai">OpenAI</option>
                 <option value="gemini">Google Gemini</option>
                 <option value="xai">xAI / Grok</option>
@@ -161,123 +120,99 @@
                 <option value="ollama">Ollama (local)</option>
               </select>
             </div>
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;">
-              <div>
-                <label style="font-size:10px;color:var(--muted,#6c7086);">BASE URL</label>
-                <input id="providerBaseUrl" type="text" placeholder="https://openrouter.ai/api/v1"
-                  style="width:100%;font-size:12px;padding:4px 6px;background:var(--surface3,#313244);border:1px solid var(--border,#45475a);border-radius:4px;color:inherit;box-sizing:border-box;" />
-              </div>
-              <div>
-                <label style="font-size:10px;color:var(--muted,#6c7086);">API KEY</label>
-                <input id="providerApiKey" type="password" placeholder="sk-or-… / AIza… / sk-…"
-                  style="width:100%;font-size:12px;padding:4px 6px;background:var(--surface3,#313244);border:1px solid var(--border,#45475a);border-radius:4px;color:inherit;box-sizing:border-box;" />
-              </div>
-            </div>
-            <div>
-              <label style="font-size:10px;color:var(--muted,#6c7086);">MODEL</label>
-              <input id="providerModel" type="text" placeholder="e.g. anthropic/claude-sonnet-4-5  or  gpt-4o-mini  or  gemini-2.5-flash"
-                style="width:100%;font-size:12px;padding:4px 6px;background:var(--surface3,#313244);border:1px solid var(--border,#45475a);border-radius:4px;color:inherit;box-sizing:border-box;" />
-            </div>
-            <div style="display:flex;align-items:center;justify-content:space-between;">
-              <span style="font-size:10px;color:var(--muted,#6c7086);">Keys stored in browser only — never sent to server except during a session run</span>
-              <button id="saveProviderBtn" class="btn small" style="font-size:11px;padding:2px 10px;" type="button">Save</button>
-            </div>
           </div>
-          <form class="composer-inner" id="composer">
-            <input id="composerInput" type="text" autocomplete="off"
-                   placeholder="Describe a goal — e.g. 'Calculate the first 20 Fibonacci numbers'" />
-            <button class="btn primary small" type="submit">Deploy →</button>
-          </form>
-          <div class="quick">
-            <button class="chip" data-prompt="Echo back 'Hello from Atrium' and list all environment variables available in the sandbox.">Echo test</button>
-            <button class="chip" data-prompt="Write and run a Python script that calculates the first 20 Fibonacci numbers.">Fibonacci script</button>
-            <button class="chip" data-prompt="Investigate a P1 incident: payments service latency is spiking. Produce a structured triage report.">Incident triage</button>
-            <button class="chip" data-prompt="Run an observability readiness review across metrics, traces, and logs. Summarize gaps.">Observability review</button>
+          <div class="form-row" style="margin-top:var(--s-3)" id="providerFields">
+            <div class="form-group"><label>Base URL</label><input id="newRunBaseUrl" placeholder="https://api.deepseek.com/v1"></div>
+            <div class="form-group"><label>API Key</label><input id="newRunApiKey" type="password" placeholder="sk-..."></div>
           </div>
+          <div class="form-group" style="margin-top:var(--s-3)"><label>Model</label><input id="newRunModel" placeholder="deepseek-chat"></div>
+          <div class="form-hint" id="providerHint">API keys are sent only during the run and never stored on the server.</div>
+          <div class="form-hint" id="anthropicOverrideHint" style="display:none">DeepSeek natively supports the Anthropic API at <code>https://api.deepseek.com/anthropic</code>. Use your DeepSeek API key directly — no proxy needed. See <a href="https://api-docs.deepseek.com/guides/anthropic_api" target="_blank">DeepSeek docs</a>.</div>
         </div>
-      </section>
 
-      <!-- Right rail: budget + event feed + session info -->
-      <aside class="right-rail">
-        <div class="panel">
-          <div class="panel-title">Budget</div>
-          <div class="budget-bar"><div class="budget-fill" id="budgetFill"></div></div>
-          <div class="budget-stats">
-            <span id="budgetConsumed">$0.00 consumed</span>
-            <span id="budgetLimit" class="mono">/ $12.00</span>
+        <!-- Step 3: Options -->
+        <div class="step-section">
+          <div class="step-label">Step 3 &middot; Options</div>
+          <div class="form-row">
+            <div class="form-group"><label>Budget Limit</label><input id="newRunBudget" placeholder="12.00" value="12.00"></div>
+            <div class="form-group"><label>Timeout (seconds)</label><input id="newRunTimeout" placeholder="1800" value="1800"></div>
           </div>
         </div>
 
-        <div class="panel" style="flex:1; min-height:0; display:flex; flex-direction:column;">
-          <div class="panel-title">Live Event Feed</div>
-          <div class="event-feed" id="eventFeed" style="flex:1; min-height:0;"></div>
-        </div>
+        <!-- Deploy -->
+        <button class="btn btn-primary" id="deployBtn" style="height:40px;padding:0 24px;font-size:14px" onclick="deployRun()">Deploy Agent</button>
+        <span class="form-hint" style="margin-left:var(--s-3)" id="deployHint"></span>
+      </div>
+    </div>
 
-        <div class="panel" id="sessionInfoPanel">
-          <div class="panel-title">Session Info</div>
-          <div class="session-info-body">
-            <div class="info-row">
-              <span class="info-label">Runtime</span>
-              <span class="info-value mono" id="infoRuntime">—</span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">ID</span>
-              <span class="info-value mono" id="infoSession">—</span>
-            </div>
-            <div class="info-row">
-              <span class="info-label">Status</span>
-              <span class="info-value mono" id="infoStatus">—</span>
-            </div>
-          </div>
+    <!-- ── RUN DETAIL PAGE ─────────────────────────────────── -->
+    <div class="page" id="page-run-detail" style="display:none">
+      <div class="page-header">
+        <div style="min-width:0"><h2 id="detailTitle">Run Detail</h2><p style="font-size:12px;color:var(--text-muted);font-family:var(--mono)" id="detailId"></p></div>
+        <div style="display:flex;gap:var(--s)">
+          <button class="btn btn-sm" id="pauseBtn" disabled>Pause</button>
+          <button class="btn btn-sm" id="resumeBtn" disabled>Resume</button>
+          <button class="btn btn-sm" id="cancelBtn" disabled>Cancel</button>
+          <button class="btn btn-ghost btn-sm" onclick="switchView('runs')">&#8592; Back to Runs</button>
         </div>
-      </aside>
-    </main>
+      </div>
 
-    <!-- MCP Server Registration Modal -->
-    <div class="modal-overlay" id="mcpModal" style="display:none;">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h3>Register MCP Server</h3>
-          <button class="btn ghost small" onclick="closeMcpModal()">&times;</button>
-        </div>
-        <div class="modal-body">
-          <div class="form-group">
-            <label>Name</label>
-            <input id="mcpName" type="text" placeholder="sqlite" />
+      <!-- Tabs -->
+      <div class="tabs">
+        <div class="tab active" data-tab="transcript" onclick="switchTab('transcript')">Transcript</div>
+        <div class="tab" data-tab="events" onclick="switchTab('events')">Events <span id="eventCount" style="font-size:10px;margin-left:4px;color:var(--text-muted)"></span></div>
+        <div class="tab" data-tab="config" onclick="switchTab('config')">Configuration</div>
+        <div class="tab" data-tab="api" onclick="switchTab('api')">API</div>
+      </div>
+
+      <!-- Tab: Transcript -->
+      <div class="tab-content" id="tab-transcript">
+        <div class="transcript" id="transcript"></div>
+      </div>
+
+      <!-- Tab: Events -->
+      <div class="tab-content" id="tab-events" style="display:none">
+        <div class="ev-list" id="eventFeed"></div>
+      </div>
+
+      <!-- Tab: Configuration -->
+      <div class="tab-content" id="tab-config" style="display:none">
+        <div class="card" style="max-width:520px"><div class="config-grid" id="configGrid"></div></div>
+      </div>
+
+      <!-- Tab: API -->
+      <div class="tab-content" id="tab-api" style="display:none">
+        <div class="card" style="max-width:520px">
+          <p style="font-size:13px;color:var(--text-secondary);margin-bottom:var(--s-3)">Use the Atrium API to programmatically invoke agents with the same configuration.</p>
+          <div class="form-group"><label>Stream events (SSE)</label>
+            <div style="font-family:var(--mono);font-size:12px;background:var(--bg);padding:var(--s-2);border-radius:var(--r);border:1px solid var(--border);word-break:break-all" id="apiSseUrl">—</div>
           </div>
-          <div class="form-group">
-            <label>Transport</label>
-            <select id="mcpTransport">
-              <option value="stdio">stdio — Local Command</option>
-              <option value="sse">sse — Remote URL</option>
-            </select>
-          </div>
-          <div class="form-group">
-            <label>Upstream Command / URL</label>
-            <input id="mcpUpstream" type="text" placeholder="uvx mcp-server-sqlite --db-path /data.db" />
-          </div>
-        </div>
-        <div class="modal-footer">
-          <button class="btn ghost small" onclick="closeMcpModal()">Cancel</button>
-          <button class="btn primary small" onclick="createMcpServer()">Register</button>
         </div>
       </div>
     </div>
 
-    <!-- Agent Detail Modal -->
-    <div class="modal-overlay" id="agentDetailModal" style="display:none;">
-      <div class="modal-content">
-        <div class="modal-header">
-          <h3 id="agentDetailName">Agent</h3>
-          <button class="btn ghost small" onclick="closeAgentDetail()">&times;</button>
-        </div>
-        <div class="modal-body" id="agentDetailBody"></div>
-        <div class="modal-footer">
-          <button class="btn ghost small" onclick="closeAgentDetail()">Close</button>
-        </div>
+    <!-- Composer (shown on run detail page) -->
+    <div class="composer" id="composerBar" style="display:none">
+      <div class="composer-inner">
+        <input id="composerInput" type="text" autocomplete="off" placeholder="Send a follow-up message to the agent...">
+        <button class="btn btn-primary btn-sm" id="sendBtn">Send</button>
+        <button class="btn btn-ghost btn-sm" id="closeRunBtn" title="Close this run">&#10005;</button>
       </div>
     </div>
+  </main>
+</div>
 
-    <script src="/dashboard/static/console.js" type="module"></script>
-  </body>
+<!-- MCP Modal -->
+<div class="modal-overlay" id="mcpModal" style="display:none">
+  <div class="modal"><div class="modal-head"><h4>Register MCP Server</h4><button class="btn btn-ghost btn-sm" onclick="closeMcpModal()">&#10005;</button></div>
+  <div class="modal-body">
+    <div class="form-group"><label>Name</label><input id="mcpName" placeholder="sqlite"></div>
+    <div class="form-group"><label>Transport</label><select id="mcpTransport"><option value="stdio">stdio</option><option value="sse">sse</option></select></div>
+    <div class="form-group"><label>Command / URL</label><input id="mcpUpstream" placeholder="uvx mcp-server-sqlite --db-path /data.db"></div>
+  </div>
+  <div class="modal-foot"><button class="btn btn-ghost btn-sm" onclick="closeMcpModal()">Cancel</button><button class="btn btn-primary btn-sm" onclick="createMcpServer()">Register</button></div></div>
+</div>
+
+<script src="/dashboard/static/console.js" type="module"></script>
+</body>
 </html>

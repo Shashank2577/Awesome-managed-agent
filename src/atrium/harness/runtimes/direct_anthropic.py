@@ -1,6 +1,8 @@
 """Direct Anthropic Claude Agent SDK runtime adapter."""
 from __future__ import annotations
 
+import os
+
 
 class DirectAnthropicRuntime:
     name = "direct_anthropic"
@@ -19,7 +21,11 @@ class DirectAnthropicRuntime:
         return argv
 
     def model_endpoint(self, model: str) -> str:
-        return "https://api.anthropic.com"
+        # Allow override via env var (for proxies like OpenRouter, LiteLLM)
+        return os.environ.get("ANTHROPIC_BASE_URL", "https://api.anthropic.com")
 
     def required_env(self, model: str) -> dict[str, str]:
-        return {"ANTHROPIC_API_KEY": "ANTHROPIC_API_KEY"}
+        return {
+            "ANTHROPIC_API_KEY": "ANTHROPIC_API_KEY",
+            "ANTHROPIC_BASE_URL": "ANTHROPIC_BASE_URL",  # optional: override for proxies
+        }

@@ -1,0 +1,14 @@
+{
+  "name": "seed-read-url",
+  "description": "Fetch the full content of any URL as clean readable markdown using Jina Reader. Pass a URL as the query.",
+  "agent_type": "http",
+  "category": "research",
+  "api_url": "https://r.jina.ai/{query}",
+  "method": "GET",
+  "headers": {},
+  "query_params": {},
+  "response_path": "",
+  "capabilities": ["read", "url", "web", "scrape", "markdown", "fetch"],
+  "seeded": true,
+  "seed_version": 1
+}

@@ -44,10 +44,17 @@ async def main() -> int:
         emit({"type": "result", "subtype": "error", "message": "no objective provided"})
         return 1
 
-    client = anthropic.AsyncAnthropic()
+    # Allow overriding the Anthropic API endpoint (for proxies like OpenRouter)
+    # which can translate Anthropic SDK calls to DeepSeek, Gemini, etc.
+    base_url = os.environ.get("ANTHROPIC_BASE_URL", "").strip() or None
+
+    client_kwargs: dict = {}
+    if base_url:
+        client_kwargs["base_url"] = base_url
+    client = anthropic.AsyncAnthropic(**client_kwargs)
     model = args.model
 
-    emit({"type": "system", "subtype": "init", "model": model})
+    emit({"type": "system", "subtype": "init", "model": model, "base_url": base_url or "https://api.anthropic.com"})
 
     full_text = ""
     input_tokens = 0

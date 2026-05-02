@@ -250,7 +250,10 @@ def create_app(
         return JSONResponse({"api_key": _DEV_KEY_FILE.read_text().strip(), "dev": True})
 
     @app.get("/", include_in_schema=False)
-    async def root_redirect():
+    async def serve_landing():
+        landing_path = os.path.join(dashboard_dir, "landing.html")
+        if os.path.isfile(landing_path):
+            return FileResponse(landing_path)
         return RedirectResponse(url="/dashboard")
 
     return app

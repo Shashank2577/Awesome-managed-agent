@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 from typing import Optional
 from uuid import uuid4
 
@@ -289,8 +290,26 @@ async def create_session(
             _run_gemini_session(session.session_id, workspace.workspace_id, req.objective, state)
         )
     elif req.runtime in ("direct_anthropic", "open_agent_sdk", "openclaude"):
+        # For direct_anthropic: check if Docker is actually available.
+        # If not (e.g., running in "open cloud" without Docker), use the
+        # server-side Anthropic SDK path so users can still test API overrides.
+        if req.runtime == "direct_anthropic":
+            try:
+                import aiodocker  # noqa: F401
+                _docker_available = True
+            except ImportError:
+                _docker_available = False
+            if not _docker_available or os.environ.get("ATRIUM_SANDBOX_BACKEND", "") == "none":
+                asyncio.create_task(
+                    _run_anthropic_session_server(
+                        session.session_id, workspace.workspace_id, req.objective, state,
+                        provider=req.provider, model=req.model_override or req.model,
+                    )
+                )
+                return _sess_response(session)
+
         asyncio.create_task(
-            _run_harness_session(session, workspace.workspace_id, req.objective, req.runtime, req.model_override or req.model, state)
+            _run_harness_session(session, workspace.workspace_id, req.objective, req.runtime, req.model_override or req.model, state, provider=req.provider if req.runtime == "direct_anthropic" else None)
         )
     elif req.runtime == "universal":
         asyncio.create_task(
@@ -383,6 +402,138 @@ async def _run_gemini_session(
                 pass
 
 
+async def _run_anthropic_session_server(
+    session_id: str,
+    workspace_id: str,
+    objective: str,
+    state: "AppState",
+    provider: "ProviderConfig | None" = None,
+    model: str = "claude-sonnet-4-6",
+) -> None:
+    """Run an Anthropic SDK session server-side — no Docker required.
+
+    Supports ANTHROPIC_BASE_URL override for routing through proxies
+    (OpenRouter, LiteLLM, etc.) that translate Anthropic SDK calls to
+    DeepSeek, Gemini, or any other backend.
+    """
+    import anthropic
+
+    rec = state.recorder
+    sess_store = state.session_store
+
+    async def emit(t: str, p: dict) -> None:
+        await rec.emit(session_id, t, p)
+
+    # Resolve base_url and api_key from provider config or env
+    base_url = None
+    api_key = os.environ.get("ANTHROPIC_API_KEY", "")
+    model_id = model.split(":", 1)[1] if ":" in model else model
+
+    if provider:
+        if provider.base_url:
+            base_url = provider.base_url
+        if provider.api_key:
+            api_key = provider.api_key
+        if provider.model:
+            model_id = provider.model
+
+    if not api_key:
+        await emit("THREAD_FAILED",
+                   {"error": "ANTHROPIC_API_KEY not set — provide an API key in the UI or ANTHROPIC_API_KEY env var"})
+        if sess_store:
+            await sess_store.set_status(workspace_id, session_id, SessionStatus.FAILED)
+        return
+
+    try:
+        await asyncio.sleep(0.3)
+        await emit("THREAD_PLANNING_STARTED", {})
+
+        plan_id = str(uuid4())
+        await asyncio.sleep(0.5)
+        endpoint_desc = base_url or "https://api.anthropic.com"
+        await emit("PLAN_CREATED", {
+            "plan_id": plan_id,
+            "plan_number": 1,
+            "rationale": f"Calling Anthropic SDK ({model_id}) via {endpoint_desc}",
+            "graph": {"nodes": [
+                {"key": "anthropic", "role": f"anthropic/{model_id}",
+                 "objective": objective[:80], "depends_on": []}
+            ]},
+        })
+        await emit("THREAD_RUNNING", {})
+        if sess_store:
+            await sess_store.set_status(workspace_id, session_id, SessionStatus.RUNNING)
+        await emit("AGENT_HIRED", {
+            "agent_key": "anthropic", "role": f"anthropic/{model_id}",
+            "objective": objective[:80], "depends_on": [],
+        })
+        await emit("AGENT_RUNNING", {"agent_key": "anthropic"})
+
+        # Create Anthropic client with optional base_url override
+        client_kwargs: dict = {"api_key": api_key}
+        if base_url:
+            client_kwargs["base_url"] = base_url
+        client = anthropic.AsyncAnthropic(**client_kwargs)
+
+        system_prompt = (
+            "You are a capable AI assistant. Reason carefully and complete the objective."
+        )
+
+        full_text = ""
+        input_tokens = 0
+        output_tokens = 0
+
+        async with client.messages.stream(
+            model=model_id,
+            max_tokens=8192,
+            system=system_prompt,
+            messages=[{"role": "user", "content": objective}],
+        ) as stream:
+            async for text_chunk in stream.text_stream:
+                full_text += text_chunk
+
+            final = await stream.get_final_message()
+            input_tokens = final.usage.input_tokens
+            output_tokens = final.usage.output_tokens
+
+        preview = full_text[:180] + ("…" if len(full_text) > 180 else "")
+        await emit("AGENT_MESSAGE", {"agent_key": "anthropic", "text": preview})
+        await emit("AGENT_OUTPUT", {"agent_key": "anthropic", "output": {"text": full_text}})
+        await emit("AGENT_COMPLETED", {"agent_key": "anthropic"})
+        await asyncio.sleep(0.2)
+        await emit("EVIDENCE_PUBLISHED", {
+            "headline": f"Anthropic SDK ({model_id}) Response",
+            "summary": full_text[:400],
+            "sections": [{
+                "title": "Full Response",
+                "content": full_text,
+                "key_facts": [
+                    f"Model: {model_id}",
+                    f"Endpoint: {endpoint_desc}",
+                    f"Input tokens: {input_tokens}",
+                    f"Output tokens: {output_tokens}",
+                    "Executed server-side via Anthropic SDK — no sandbox container needed",
+                ],
+            }],
+        })
+        await emit("THREAD_COMPLETED", {})
+        if sess_store:
+            await sess_store.set_status(workspace_id, session_id, SessionStatus.COMPLETED)
+
+    except Exception as exc:
+        import traceback
+        import logging
+        logging.getLogger(__name__).error(
+            "Anthropic server-side session failed: %s", traceback.format_exc()
+        )
+        await emit("THREAD_FAILED", {"error": str(exc)})
+        if sess_store:
+            try:
+                await sess_store.set_status(workspace_id, session_id, SessionStatus.FAILED)
+            except Exception:
+                pass
+
+
 async def _run_harness_session(
     session: "Session",
     workspace_id: str,
@@ -436,6 +587,20 @@ async def _run_harness_session(
             if provider.system_prompt:
                 env["LLM_SYSTEM_PROMPT"] = provider.system_prompt
 
+        # For direct_anthropic runtime: provider config lets you override the
+        # Anthropic API endpoint — useful for pointing at proxies (OpenRouter,
+        # LiteLLM, etc.) that translate Anthropic SDK calls to DeepSeek/Gemini/etc.
+        if runtime_name == "direct_anthropic" and provider:
+            if provider.base_url:
+                env["ANTHROPIC_BASE_URL"] = provider.base_url
+            if provider.api_key:
+                env["ANTHROPIC_API_KEY"] = provider.api_key
+            # Model override
+            if provider.model:
+                model = provider.model
+            if provider.system_prompt:
+                env["LLM_SYSTEM_PROMPT"] = provider.system_prompt
+
         # Pick backend (docker or kubernetes based on env)
         backend = os.getenv("ATRIUM_SANDBOX_BACKEND", "docker")
         if backend == "kubernetes":
@@ -449,7 +614,16 @@ async def _run_harness_session(
                 runner_cls = InMemorySandboxRunner
 
         limits = ResourceLimits()
-        policy = NetworkPolicy(allow_egress=[runtime.model_endpoint(model)])
+        # Build allow_egress: include the runtime's default endpoint AND any
+        # provider-supplied override (so proxy URLs like OpenRouter are allowed)
+        egress_hosts = [runtime.model_endpoint(model)]
+        if provider and provider.base_url:
+            from urllib.parse import urlparse
+            parsed = urlparse(provider.base_url)
+            override_host = f"{parsed.scheme}://{parsed.netloc}"
+            if override_host not in egress_hosts:
+                egress_hosts.append(override_host)
+        policy = NetworkPolicy(allow_egress=egress_hosts)
 
         # Transition to RUNNING
         if sess_store:
@@ -586,10 +760,27 @@ async def stream_session(
 
     async def event_generator():
         try:
-            async for evt in state.recorder.subscribe(session_id):
+            is_terminal = session.status in (
+                SessionStatus.COMPLETED,
+                SessionStatus.FAILED,
+                SessionStatus.CANCELLED,
+            )
+            # For terminal sessions, give the browser's EventSource time to
+            # fully initialise before we start streaming events.  Otherwise
+            # all events arrive before onmessage is registered and are lost.
+            if is_terminal:
+                yield ":ok\n\n"
+                await asyncio.sleep(0.2)
+
+            async for evt in state.recorder.subscribe(
+                session_id,
+                terminal=is_terminal,
+            ):
                 if await request.is_disconnected():
                     break
                 yield format_sse(evt)
+                if is_terminal:
+                    await asyncio.sleep(0.005)
         except Exception:
             pass
         yield format_sse_end()

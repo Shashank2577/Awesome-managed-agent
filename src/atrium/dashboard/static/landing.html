@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Atrium — AI Agent Orchestration Platform</title>
+<link rel="stylesheet" href="/dashboard/static/styles.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'><rect x='2' y='2' width='20' height='20' rx='5' fill='%232563EB'/></svg>">
+</head>
+<body style="overflow:auto;height:auto">
+
+<!-- Nav -->
+<nav class="nav">
+  <div class="nav-left">
+    <a class="nav-brand" href="/">
+      <svg viewBox="0 0 24 24"><rect x="2" y="2" width="20" height="20" rx="5" fill="#2563EB"/><text x="12" y="17" text-anchor="middle" fill="white" font-size="13" font-weight="700" font-family="Inter,sans-serif">A</text></svg>
+      Atrium
+    </a>
+    <a href="/dashboard" class="nav-link">Console</a>
+    <a href="#features" class="nav-link">Features</a>
+    <a href="#runtimes" class="nav-link">Runtimes</a>
+  </div>
+  <div class="nav-right">
+    <a href="/dashboard" class="btn btn-primary btn-sm">Open Console</a>
+  </div>
+</nav>
+
+<!-- Hero -->
+<section class="landing-hero">
+  <h1>Deploy AI agents<br>in isolated sandboxes</h1>
+  <p class="lh-sub">Atrium gives your agents a safe place to work. Docker containers, real-time streaming, full human oversight. Any model, any provider.</p>
+  <div class="lh-actions">
+    <a href="/dashboard" class="btn btn-primary" style="height:42px;padding:0 24px">Open Console</a>
+    <a href="#features" class="btn">Learn more</a>
+  </div>
+
+  <div class="terminal-preview">
+    <div class="tp-bar"><span></span><span></span><span></span></div>
+    <div class="tp-body">
+      <span class="tp-blue">atrium</span> <span class="tp-white">~</span> deploy --runtime universal --model deepseek-chat<br>
+      <br>
+      <span class="tp-green">&#9654;</span> <span class="tp-white">Sandbox created — 512 MB, 1 vCPU</span><br>
+      <span class="tp-green">&#9654;</span> <span class="tp-white">Agent initialized — tools: bash, read_file, write_file, web_fetch</span><br>
+      <span class="tp-green">&#9654;</span> <span class="tp-white">Running: "Research latest AI safety papers"</span><br>
+      <span class="tp-green">&#9654;</span> web_fetch &#8594; arxiv.org — 3 papers found<br>
+      <br>
+      <span class="tp-green">&#10003;</span> <span class="tp-white">Done in 4.2s — $0.0012 consumed</span><br>
+      <span class="tp-blue">atrium</span> <span class="tp-white">~</span> <span class="tp-cursor"></span>
+    </div>
+  </div>
+</section>
+
+<!-- Features -->
+<section class="landing-section" id="features">
+  <div class="ls-inner">
+    <div class="ls-header"><h2>Everything you need to run agents safely</h2><p>Infrastructure for deploying, monitoring, and controlling AI agents in production.</p></div>
+    <div class="l-grid">
+      <div class="l-card"><div class="lc-icon">&#9632;</div><h4>Docker Sandboxes</h4><p>Every agent runs in its own container with hard CPU, memory, and network limits. No shared state.</p></div>
+      <div class="l-card"><div class="lc-icon">&#9889;</div><h4>Real-Time Streaming</h4><p>Watch agent thoughts, tool calls, and outputs as they happen via SSE-based event streaming.</p></div>
+      <div class="l-card"><div class="lc-icon">&#8644;</div><h4>Any Provider</h4><p>DeepSeek, OpenAI, Anthropic, Gemini, Groq, Ollama, OpenRouter — one universal runtime, any model.</p></div>
+      <div class="l-card"><div class="lc-icon">&#9633;</div><h4>Human-in-the-Loop</h4><p>Pause execution, review plans, and approve or reject at any checkpoint. Full control.</p></div>
+      <div class="l-card"><div class="lc-icon">&#36;</div><h4>Cost Controls</h4><p>Hard budget limits per session. Track token usage and spend in real time. No surprises.</p></div>
+      <div class="l-card"><div class="lc-icon">&#9741;</div><h4>MCP Integration</h4><p>Connect external tools — SQL databases, GitHub, REST APIs — through the Model Context Protocol.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- Runtimes -->
+<section class="landing-section alt" id="runtimes">
+  <div class="ls-inner">
+    <div class="ls-header"><h2>Bring your own model</h2><p>Five runtimes. Dozens of providers. One consistent agent interface.</p></div>
+    <div class="rt-grid">
+      <div class="rt-card"><div class="rt-icon" style="background:#ECFDF5;color:#059669">E</div><h4>Echo</h4><p>Demo mode — no API key needed</p><code>echo:test</code></div>
+      <div class="rt-card"><div class="rt-icon" style="background:#F5F3FF;color:#7C3AED">A</div><h4>Direct Anthropic</h4><p>Anthropic SDK — Claude models</p><code>ANTHROPIC_API_KEY</code></div>
+      <div class="rt-card"><div class="rt-icon" style="background:#EFF6FF;color:#2563EB">O</div><h4>OpenAI Agents SDK</h4><p>OpenAI SDK — GPT models</p><code>OPENAI_API_KEY</code></div>
+      <div class="rt-card"><div class="rt-icon" style="background:#FFFBEB;color:#D97706">U</div><h4>Universal</h4><p>Any OpenAI-compatible API</p><code>any provider</code></div>
+    </div>
+  </div>
+</section>
+
+<!-- CTA -->
+<section class="cta-section">
+  <h2>Ready to deploy your first agent?</h2>
+  <p>Open the console, pick a runtime, and describe what you want to build.</p>
+  <a href="/dashboard" class="btn btn-primary" style="height:42px;padding:0 28px;font-size:15px">Open Console</a>
+</section>
+
+<footer class="landing-footer">Atrium &middot; Observable, cost-bounded agent orchestration</footer>
+</body>
+</html>

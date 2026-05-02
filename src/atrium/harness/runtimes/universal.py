@@ -46,6 +46,12 @@ PROVIDER_PRESETS: dict[str, dict] = {
         "example_models": ["llama3.2", "mistral", "qwen2.5-coder"],
         "note": "Local Ollama — no API key needed",
     },
+    "deepseek": {
+        "base_url": "https://api.deepseek.com/v1",
+        "key_env": "DEEPSEEK_API_KEY",
+        "example_models": ["deepseek-chat", "deepseek-reasoner"],
+        "note": "DeepSeek V3/R1 — OpenAI-compatible, cost-effective with strong coding performance",
+    },
 }
 
 

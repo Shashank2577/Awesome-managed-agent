@@ -7,7 +7,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN useradd -u 10001 -m atrium
 RUN mkdir -p /workspace /app && chown -R atrium:atrium /workspace /app
 
-RUN pip install --no-cache-dir --timeout 120 --retries 5 "openai>=1.0"
+RUN pip install --no-cache-dir --timeout 120 --retries 5 "openai>=1.0" "httpx>=0.27"
 
 COPY --chown=atrium:atrium universal_entrypoint.py /app/universal_entrypoint.py
 

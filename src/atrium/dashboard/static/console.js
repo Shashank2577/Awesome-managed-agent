@@ -1,944 +1,311 @@
-// =============================================================
-// Atrium · Console  (sessions-first, auth-aware)
-// =============================================================
+// Atrium Console · Multi-view Agent Platform
+const $=(s,r=document)=>r.querySelector(s);const $$=(s,r=document)=>[...r.querySelectorAll(s)];
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 
-const $ = (sel, root = document) => root.querySelector(sel);
-const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
-const escape = (s) =>
-  String(s ?? "").replace(/[&<>"']/g, (c) =>
-    ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]),
-  );
+// ── API ──────────────────────────────────────────────────────
+let _apiKey=localStorage.getItem("atrium_api_key")||null;
+async function ensureApiKey(){if(_apiKey)return _apiKey;try{const r=await fetch("/api/v1/setup");if(r.ok){const d=await r.json();_apiKey=d.api_key;localStorage.setItem("atrium_api_key",_apiKey);if(d.dev){const b=$("#devBadge");if(b)b.style.display=""}}}catch(_){}return _apiKey}
+async function api(path,init={}){const key=await ensureApiKey();const r=await fetch(path,{headers:{"Content-Type":"application/json",...(key?{"X-Atrium-Key":key}:{}),...(init.headers||{})},...init});if(!r.ok)throw new Error(`${r.status} ${r.statusText}`);return r.json()}
 
-// ---------------------------------------------------------------
-// API key management
-// ---------------------------------------------------------------
+// ── Provider presets ─────────────────────────────────────────
+const PRESETS={deepseek:{base_url:"https://api.deepseek.com/v1",model:"deepseek-chat"},openrouter:{base_url:"https://openrouter.ai/api/v1",model:"anthropic/claude-sonnet-4-5"},openai:{base_url:"https://api.openai.com/v1",model:"gpt-4o-mini"},gemini:{base_url:"https://generativelanguage.googleapis.com/v1beta/openai/",model:"gemini-2.5-flash"},xai:{base_url:"https://api.x.ai/v1",model:"grok-3-mini"},nvidia:{base_url:"https://integrate.api.nvidia.com/v1",model:"meta/llama-3.3-70b-instruct"},groq:{base_url:"https://api.groq.com/openai/v1",model:"llama-3.3-70b-versatile"},ollama:{base_url:"http://localhost:11434/v1",model:"llama3.2"}};
+// Anthropic SDK override presets — DeepSeek natively supports Anthropic API format!
+// Base URL: https://api.deepseek.com/anthropic  (no proxy needed)
+const ANTHROPIC_PRESETS={deepseek:{base_url:"https://api.deepseek.com/anthropic",model:"deepseek-chat",hint:"DeepSeek native Anthropic API — use your DeepSeek API key directly"},deepseek_reasoner:{base_url:"https://api.deepseek.com/anthropic",model:"deepseek-reasoner",hint:"DeepSeek R1 reasoning model via Anthropic API"},openrouter_claude:{base_url:"https://openrouter.ai/api/v1",model:"anthropic/claude-sonnet-4-5",hint:"Claude via OpenRouter"},openrouter_gemini:{base_url:"https://openrouter.ai/api/v1",model:"google/gemini-2.5-flash",hint:"Gemini via OpenRouter"},litellm:{base_url:"http://localhost:4000/v1",model:"deepseek-chat",hint:"Local LiteLLM proxy"},custom:{base_url:"https://api.anthropic.com",model:"claude-sonnet-4-6",hint:"Default Anthropic — or enter any proxy URL"}};
+const RUNTIME_MODELS={echo:"echo:test",direct_gemini:"gemini:gemini-2.5-flash",direct_anthropic:"anthropic:claude-sonnet-4-6",open_agent_sdk:"openai:gpt-4o-mini",universal:"universal:configured"};
 
-let _apiKey = localStorage.getItem("atrium_api_key") || null;
+function loadPC(){try{return JSON.parse(localStorage.getItem("atrium_provider")||"{}")}catch(_){return{}}}
+function savePC(c){localStorage.setItem("atrium_provider",JSON.stringify(c))}
 
-async function ensureApiKey() {
-  if (_apiKey) return _apiKey;
-  try {
-    const res = await fetch("/api/v1/setup");
-    if (res.ok) {
-      const data = await res.json();
-      _apiKey = data.api_key;
-      localStorage.setItem("atrium_api_key", _apiKey);
-      if (data.dev) {
-        const badge = $("#devModeBadge");
-        if (badge) badge.style.display = "";
-      }
-    }
-  } catch (_) { /* non-dev mode or not ready */ }
-  return _apiKey;
+// ── View switching ───────────────────────────────────────────
+let _currentView="home";
+function switchView(view,data){
+  _currentView=view;
+  // Hide all pages
+  $$(".page").forEach(p=>p.style.display="none");
+  // Show target page
+  const page=$(`#page-${view}`);if(page)page.style.display="";
+  // Update sidebar
+  $$(".sidebar-item").forEach(i=>i.classList.toggle("active",i.dataset.view===view));
+  // Special: run detail
+  if(view==="run-detail"&&data)renderRunDetail(data);
+  // Composer bar only on run-detail
+  $("#composerBar").style.display=view==="run-detail"?"":"none";
+  if(view==="home")refreshHome();
+  if(view==="runs")refreshRunsPage();
+  if(view==="agents")refreshAgentsPage();
+  if(view==="tools")refreshToolsPage();
+}
+function switchTab(tab){
+  $$(".tab").forEach(t=>t.classList.toggle("active",t.dataset.tab===tab));
+  $$(".tab-content").forEach(c=>c.style.display="none");
+  const c=$(`#tab-${tab}`);if(c)c.style.display="";
 }
 
-async function api(path, init = {}) {
-  const key = await ensureApiKey();
-  const res = await fetch(path, {
-    headers: {
-      "Content-Type": "application/json",
-      ...(key ? { "X-Atrium-Key": key } : {}),
-      ...(init.headers || {}),
-    },
-    ...init,
+// ── Home page ────────────────────────────────────────────────
+async function refreshHome(){
+  try{
+    const sessions=await api("/api/v1/sessions");state.sessions=sessions||[];
+    const total=state.sessions.length;
+    const completed=state.sessions.filter(s=>s.status==="COMPLETED").length;
+    const active=state.sessions.filter(s=>s.status==="RUNNING"||s.status==="PLANNING").length;
+    const failed=state.sessions.filter(s=>s.status==="FAILED").length;
+    const successRate=total>0?Math.round((completed/total)*100)+"%":"—";
+    // Estimate cost
+    let totalCost=0;state.sessions.forEach(s=>{const c=parseFloat(s.cost||0);totalCost+=c||(s.status==="COMPLETED"?0.01:0)});
+    $("#metricTotal").textContent=total;
+    $("#metricSuccess").textContent=successRate;
+    $("#metricActive").textContent=active;
+    $("#metricSpent").textContent=`$${totalCost.toFixed(2)}`;
+    // Recent runs table
+    const recent=state.sessions.slice(0,10);
+    $("#recentRunsTable").innerHTML=recent.length?recent.map(s=>{
+      const statusBadge=s.status==="COMPLETED"?"badge-success":s.status==="FAILED"?"badge-error":s.status==="RUNNING"?"badge-info":"badge";
+      return`<tr style="cursor:pointer" onclick="switchView('run-detail','${s.session_id}')"><td style="max-width:280px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(s.objective||s.title||"—")}</td><td><span class="badge">${esc(s.runtime||"—")}</span></td><td><span class="badge ${statusBadge}"><span class="dot"></span>${esc(s.status||"—")}</span></td><td class="text-mono text-muted">—</td><td class="text-mono text-muted">${esc(s.created_at?.split("T")[0]||"—")}</td></tr>`;
+    }).join(""):`<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:var(--s-4)">No runs yet. <a href="#" onclick="switchView('new-run');return false">Create your first run</a>.</td></tr>`;
+  }catch(_){}
+}
+
+// ── Runs page ────────────────────────────────────────────────
+async function refreshRunsPage(){
+  try{
+    const sessions=await api("/api/v1/sessions");state.sessions=sessions||[];
+    $("#runCount").textContent=state.sessions.length;
+    $("#allRunsTable").innerHTML=state.sessions.length?state.sessions.map(s=>{
+      const sb=s.status==="COMPLETED"?"badge-success":s.status==="FAILED"?"badge-error":s.status==="RUNNING"?"badge-info":"badge";
+      return`<tr style="cursor:pointer" onclick="switchView('run-detail','${s.session_id}')"><td style="max-width:260px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(s.objective||s.title||"—")}</td><td><span class="badge">${esc(s.runtime||"—")}</span></td><td><span class="badge ${sb}"><span class="dot"></span>${esc(s.status||"—")}</span></td><td class="text-mono text-muted">—</td><td class="text-mono text-muted">$${esc(String(s.cost||"—"))}</td><td class="text-mono text-muted">${esc(s.created_at?.split("T")[0]||"—")}</td></tr>`;
+    }).join(""):`<tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:var(--s-4)">No runs yet.</td></tr>`;
+  }catch(_){}
+}
+
+// ── Agents page ──────────────────────────────────────────────
+async function refreshAgentsPage(){
+  try{
+    const resp=await api("/api/v1/agents").catch(()=>({agents:[]}));
+    const agents=resp.agents||[];
+    const mcp=await api("/api/v1/mcp-servers").catch(()=>[]);
+    const all=[...agents,...(mcp||[])];
+    $("#agentCount").textContent=all.length;
+    if(!all.length){$("#agentsList").innerHTML=`<div class="empty"><h3>No agents configured</h3><p>Seed agents load automatically from the corpus. Create custom agents or register MCP tools to extend your agent fleet.</p><button class="btn btn-primary btn-sm" onclick="switchView('new-run')">+ New Run</button></div>`;return}
+    $("#agentsList").innerHTML=`<div class="table-wrap"><table><thead><tr><th>Name</th><th>Type</th><th>Category</th><th>Description</th></tr></thead><tbody>${all.map(a=>{const n=(a.name||"").replace(/^seed\//,"");return`<tr><td style="font-weight:500">${esc(n)}</td><td><span class="badge badge-info">${esc(a.agent_type||a.transport||"—")}</span></td><td><span class="badge">${esc(a.category||"—")}</span></td><td style="max-width:300px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(a.description||a.upstream||"—")}</td></tr>`}).join("")}</tbody></table></div>`;
+  }catch(_){}
+}
+
+// ── Tools page ───────────────────────────────────────────────
+async function refreshToolsPage(){
+  try{
+    const mcp=await api("/api/v1/mcp-servers").catch(()=>[]);
+    if(!mcp.length){$("#toolsList").innerHTML=`<div class="empty"><h3>No MCP servers registered</h3><p>Connect external tools — databases, APIs, GitHub — to your agents via MCP.</p><button class="btn btn-primary btn-sm" onclick="openMcpModal()">Register MCP Server</button></div>`;return}
+    $("#toolsList").innerHTML=`<div class="table-wrap"><table><thead><tr><th>Name</th><th>Transport</th><th>Upstream</th><th></th></tr></thead><tbody>${mcp.map(m=>`<tr><td style="font-weight:500">${esc(m.name||"—")}</td><td><span class="badge">${esc(m.transport||"—")}</span></td><td style="font-family:var(--mono);font-size:11.5px;max-width:300px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(m.upstream||"—")}</td><td><button class="btn btn-ghost btn-xs" onclick="deleteMcp('${esc(m.name)}')">Remove</button></td></tr>`).join("")}</tbody></table></div>`;
+  }catch(_){}
+}
+async function deleteMcp(name){try{await api(`/api/v1/mcp-servers/${name}`,{method:"DELETE"});showToast(`Removed "${name}"`);refreshToolsPage()}catch(e){showToast("Failed: "+e.message,true)}}
+
+// ── New Run flow ─────────────────────────────────────────────
+function wireNewRunForm(){
+  const rt=$("#newRunRuntime"),preset=$("#newRunPreset");
+  if(!rt||!preset)return;
+  rt.addEventListener("change",()=>{
+    const showProvider=rt.value==="universal"||rt.value==="direct_anthropic";
+    $("#providerFields").style.display=showProvider?"":"none";
+    $("#newRunPreset").parentElement.parentElement.style.display=showProvider?"":"none";
+    $("#newRunModel").parentElement.style.display=showProvider?"":"none";
+    // Show Anthropic override hint
+    $("#providerHint").style.display=rt.value==="direct_anthropic"?"none":"";
+    $("#anthropicOverrideHint").style.display=rt.value==="direct_anthropic"?"":"none";
+    // Swap preset options based on runtime
+    if(rt.value==="direct_anthropic"){
+      preset.innerHTML=Object.keys(ANTHROPIC_PRESETS).map(k=>`<option value="${k}">${k.replace(/_/g," ").replace(/\b\w/g,c=>c.toUpperCase())}</option>`).join("");
+      preset.value="deepseek";const p=ANTHROPIC_PRESETS["deepseek"];
+      $("#newRunBaseUrl").value=p.base_url;$("#newRunModel").value=p.model;
+    }else{
+      preset.innerHTML='<option value="deepseek">DeepSeek</option><option value="openrouter">OpenRouter</option><option value="openai">OpenAI</option><option value="gemini">Google Gemini</option><option value="xai">xAI / Grok</option><option value="nvidia">NVIDIA NIM</option><option value="groq">Groq</option><option value="ollama">Ollama (local)</option>';
+      preset.value="deepseek";const p=PRESETS["deepseek"];$("#newRunBaseUrl").value=p.base_url;$("#newRunModel").value=p.model;
+    }
   });
-  if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
-  return res.json();
-}
-
-// ---------------------------------------------------------------
-// Runtime selector
-// ---------------------------------------------------------------
-
-const RUNTIME_MODELS = {
-  echo: "echo:test",
-  direct_gemini: "gemini:gemini-2.5-flash",
-  universal: "universal:configured",
-  direct_anthropic: "anthropic:claude-haiku-4-5-20251001",
-  openclaude: "anthropic:claude-sonnet-4-6",
-};
-
-const RUNTIME_HINTS = {
-  echo: "No API key needed — simulates a full agent run",
-  direct_gemini: "Calls Gemini server-side — requires GEMINI_API_KEY in server env",
-  universal: "Configure any provider below — OpenRouter, OpenAI, Gemini, xAI, NVIDIA, Groq, Ollama…",
-  direct_anthropic: "Requires ANTHROPIC_API_KEY in server env",
-  openclaude: "Requires ANTHROPIC_API_KEY + sandbox (extended thinking)",
-};
-
-// Provider presets for the universal runtime
-const PROVIDER_PRESETS = {
-  openrouter: { base_url: "https://openrouter.ai/api/v1",                                  model: "anthropic/claude-sonnet-4-5" },
-  openai:     { base_url: "https://api.openai.com/v1",                                     model: "gpt-4o-mini" },
-  gemini:     { base_url: "https://generativelanguage.googleapis.com/v1beta/openai/",       model: "gemini-2.5-flash" },
-  xai:        { base_url: "https://api.x.ai/v1",                                           model: "grok-3-mini" },
-  nvidia:     { base_url: "https://integrate.api.nvidia.com/v1",                           model: "meta/llama-3.3-70b-instruct" },
-  groq:       { base_url: "https://api.groq.com/openai/v1",                               model: "llama-3.3-70b-versatile" },
-  ollama:     { base_url: "http://localhost:11434/v1",                                     model: "llama3.2" },
-};
-
-function loadProviderConfig() {
-  try { return JSON.parse(localStorage.getItem("atrium_provider") || "{}"); }
-  catch (_) { return {}; }
-}
-
-function saveProviderConfig(cfg) {
-  localStorage.setItem("atrium_provider", JSON.stringify(cfg));
-}
-
-function applyProviderPreset(name) {
-  const p = PROVIDER_PRESETS[name];
-  if (!p) return;
-  const saved = loadProviderConfig();
-  $("#providerBaseUrl").value = p.base_url;
-  $("#providerModel").value = p.model;
-  // Keep saved API key for this preset if available, otherwise keep whatever is in the field
-  const key = saved[name + "_key"] || $("#providerApiKey").value || "";
-  $("#providerApiKey").value = key;
-}
-
-function wireRuntimeSelector() {
-  const sel = $("#runtimeSelect");
-  const hint = $("#runtimeHint");
-  const panel = $("#providerPanel");
-  if (!sel || !hint) return;
-
-  function updatePanel() {
-    const isUniversal = sel.value === "universal";
-    if (panel) panel.style.display = isUniversal ? "grid" : "none";
-    hint.textContent = RUNTIME_HINTS[sel.value] || "";
-  }
-
-  sel.addEventListener("change", updatePanel);
-
-  // Preset selector
-  const presetSel = $("#providerPreset");
-  if (presetSel) {
-    presetSel.addEventListener("change", () => {
-      if (presetSel.value) applyProviderPreset(presetSel.value);
-    });
-  }
-
-  // Save button
-  const saveBtn = $("#saveProviderBtn");
-  if (saveBtn) {
-    saveBtn.addEventListener("click", () => {
-      const cfg = loadProviderConfig();
-      const preset = presetSel?.value || "";
-      if (preset) cfg[preset + "_key"] = $("#providerApiKey").value;
-      cfg._last = {
-        base_url: $("#providerBaseUrl").value,
-        api_key: $("#providerApiKey").value,
-        model: $("#providerModel").value,
-        preset,
-      };
-      saveProviderConfig(cfg);
-      saveBtn.textContent = "Saved ✓";
-      setTimeout(() => { saveBtn.textContent = "Save"; }, 1500);
-    });
-  }
-
-  // Restore last saved config
-  const saved = loadProviderConfig();
-  if (saved._last) {
-    const last = saved._last;
-    if (last.preset && presetSel) presetSel.value = last.preset;
-    if ($("#providerBaseUrl")) $("#providerBaseUrl").value = last.base_url || "";
-    if ($("#providerApiKey")) $("#providerApiKey").value = last.api_key || "";
-    if ($("#providerModel")) $("#providerModel").value = last.model || "";
-  } else {
-    // Default to OpenRouter preset
-    if (presetSel) { presetSel.value = "openrouter"; applyProviderPreset("openrouter"); }
-  }
-
-  updatePanel();
-}
-
-// ---------------------------------------------------------------
-// ThreadView — per-session render state
-// ---------------------------------------------------------------
-
-class ThreadView {
-  constructor(sessionId, title, objective) {
-    this.sessionId = sessionId;
-    this.title = title;
-    this.objective = objective;
-    this.status = "CREATED";
-
-    this.planId = null;
-    this.planNodes = [];
-    this.planCardEl = null;
-
-    this.agents = new Map();
-    this.evidenceEl = null;
-    this.eventBuffer = [];
-    this.budget = { consumed: "0.00", limit: "12.00" };
-    this.eventSource = null;
-    this.transcript = $("#transcript");
-    this.feed = $("#eventFeed");
-    this.lastSequence = 0;
-  }
-
-  appendMessage({ avatarClass, avatarText, who, body, klass = "" }) {
-    const wrap = document.createElement("div");
-    wrap.className = "msg";
-    wrap.innerHTML = `
-      <div class="avatar ${avatarClass}">${escape(avatarText)}</div>
-      <div class="bubble ${klass}">
-        <div class="who"><strong>${escape(who)}</strong></div>
-        ${body}
-      </div>
-    `;
-    this.transcript.appendChild(wrap);
-    this._scroll();
-    return wrap;
-  }
-
-  appendCard(html) {
-    const wrap = document.createElement("div");
-    wrap.className = "msg";
-    wrap.innerHTML = `<div class="avatar cmd">A</div><div class="bubble" style="padding:0;background:transparent;border:0;">${html}</div>`;
-    this.transcript.appendChild(wrap);
-    this._scroll();
-    return wrap;
-  }
-
-  _scroll() {
-    requestAnimationFrame(() => { this.transcript.scrollTop = this.transcript.scrollHeight; });
-  }
-
-  pushEventRow(evt) {
-    const klass = evt.type?.includes("FAILED") || evt.type?.includes("REJECTED")
-      ? "error" : evt.type?.startsWith("PIVOT") ? "pivot" : "";
-    const row = document.createElement("div");
-    row.className = `event-row ${klass}`;
-    row.innerHTML = `<span class="seq mono">#${evt.sequence ?? "?"}</span><span class="type">${escape(evt.type)}</span>`;
-    this.feed.appendChild(row);
-    this.feed.scrollTop = this.feed.scrollHeight;
-  }
-
-  handleEvent(evt) {
-    this.lastSequence = Math.max(this.lastSequence, evt.sequence ?? 0);
-    this.pushEventRow(evt);
-
-    switch (evt.type) {
-      case "SESSION_CREATED":
-      case "THREAD_CREATED":
-        this._onSessionCreated(evt); break;
-      case "BUDGET_RESERVED":
-      case "BUDGET_CONSUMED":
-        this._onBudget(evt); break;
-      case "THREAD_PLANNING_STARTED":
-      case "THREAD_PLANNING":
-        this._setStatus("PLANNING");
-        this._appendCommanderThinking("Planning the work…"); break;
-      case "THREAD_PAUSED":
-      case "SESSION_PAUSED":
-        this._setStatus("PAUSED"); break;
-      case "HUMAN_APPROVAL_REQUESTED":
-        this._onApprovalRequested(evt); break;
-      case "COMMANDER_MESSAGE":
-        this._onCommanderMessage(evt); break;
-      case "PLAN_CREATED":
-        this._onPlanCreated(evt); break;
-      case "PLAN_APPROVED":
-      case "PLAN_EXECUTION_STARTED":
-        break;
-      case "THREAD_RUNNING":
-      case "SESSION_RUNNING":
-        this._setStatus("RUNNING"); break;
-      case "AGENT_HIRED":
-        this._onAgentHired(evt); break;
-      case "AGENT_RUNNING":
-        this._onAgentStatus(evt, "RUNNING"); break;
-      case "AGENT_COMPLETED":
-        this._onAgentStatus(evt, "COMPLETED"); break;
-      case "AGENT_FAILED":
-        this._onAgentStatus(evt, "FAILED"); break;
-      case "AGENT_MESSAGE":
-        this._onAgentMessage(evt); break;
-      case "AGENT_OUTPUT":
-        this._onAgentOutput(evt); break;
-      case "PIVOT_REQUESTED":
-        this._onPivot(evt); break;
-      case "PIVOT_APPLIED":
-        break;
-      case "EVIDENCE_PUBLISHED":
-        this._onEvidence(evt); break;
-      case "THREAD_COMPLETED":
-      case "SESSION_COMPLETED":
-        this._setStatus("COMPLETED"); break;
-      case "THREAD_FAILED":
-      case "SESSION_FAILED":
-        this._setStatus("FAILED"); break;
-      case "THREAD_CANCELLED":
-      case "SESSION_CANCELLED":
-        this._setStatus("CANCELLED"); break;
-    }
-  }
-
-  _setStatus(status) {
-    this.status = status;
-    const pill = $("#streamPill");
-    pill.classList.toggle("live", status === "RUNNING" || status === "PLANNING");
-    pill.lastChild.textContent = ` ${status.toLowerCase()}`;
-    const isTerminal = ["COMPLETED", "FAILED", "CANCELLED"].includes(status);
-    $("#pauseBtn").disabled = isTerminal || status !== "RUNNING";
-    $("#resumeBtn").disabled = status !== "PAUSED";
-    $("#cancelBtn").disabled = isTerminal;
-    $("#infoStatus").textContent = status.toLowerCase();
-    renderSessionList();
-  }
-
-  _onSessionCreated(evt) {
-    $("#threadTitle").textContent = this.title;
-    $("#threadObjective").textContent = this.objective;
-    $("#infoSession").textContent = this.sessionId.slice(0, 8);
-    this._setStatus("PLANNING");
-  }
-
-  _onBudget(evt) {
-    const p = evt.payload || {};
-    this.budget.consumed = p.consumed ?? this.budget.consumed;
-    this.budget.limit = p.hard_limit ?? this.budget.limit;
-    const consumed = parseFloat(this.budget.consumed);
-    const limit = parseFloat(this.budget.limit);
-    const pct = Math.min(100, (consumed / limit) * 100);
-    $("#budgetFill").style.width = `${pct}%`;
-    $("#budgetConsumed").textContent = `$${consumed.toFixed(2)} consumed`;
-    $("#budgetLimit").textContent = `/ $${limit.toFixed(2)}`;
-  }
-
-  _appendCommanderThinking(text) {
-    this.appendMessage({
-      avatarClass: "cmd", avatarText: "C", who: "Commander", klass: "cmd",
-      body: `<div class="thinking" aria-label="thinking"><span></span><span></span><span></span></div> <span class="muted">${escape(text)}</span>`,
-    });
-  }
-
-  _onCommanderMessage(evt) {
-    const phase = evt.payload?.phase || "planning";
-    const text = evt.payload?.text || "";
-    this.appendMessage({
-      avatarClass: phase === "pivot" ? "pivot" : "cmd",
-      avatarText: phase === "pivot" ? "P" : "C",
-      who: phase === "pivot" ? "Commander · pivot" : "Commander",
-      klass: phase === "pivot" ? "pivot" : "cmd",
-      body: escape(text),
-    });
-  }
-
-  _onPlanCreated(evt) {
-    this.planId = evt.payload.plan_id;
-    const nodes = evt.payload.graph?.nodes || [];
-    this.planNodes = nodes.map((n) => ({ ...n, status: "PENDING" }));
-
-    const html = `
-      <article class="card plan-card">
-        <header class="plan-head">
-          <div class="row gap-2 center">
-            <span class="pill"><span class="dot"></span> Plan ${escape(evt.payload.plan_number ?? 1)}</span>
-            <h3>Hiring ${this.planNodes.length} specialist${this.planNodes.length !== 1 ? "s" : ""}</h3>
-          </div>
-          <span class="muted mono">${escape((evt.payload.plan_id || "").slice(0, 8))}</span>
-        </header>
-        <div class="plan-body">
-          <p class="plan-rationale">${escape(evt.payload.rationale || "")}</p>
-          <svg class="plan-graph" viewBox="0 0 600 200" preserveAspectRatio="xMidYMid meet"></svg>
-        </div>
-      </article>
-    `;
-    this.planCardEl = this.appendCard(html);
-    this._renderPlanGraph();
-  }
-
-  _renderPlanGraph() {
-    const svg = this.planCardEl?.querySelector(".plan-graph");
-    if (!svg) return;
-    const W = 600, H = 200;
-    const depthOf = (key, seen = new Set()) => {
-      if (seen.has(key)) return 0;
-      seen.add(key);
-      const node = this.planNodes.find((n) => n.key === key);
-      if (!node || !node.depends_on?.length) return 0;
-      return 1 + Math.max(...node.depends_on.map((d) => depthOf(d, seen)));
-    };
-    const layers = new Map();
-    this.planNodes.forEach((n) => {
-      const d = depthOf(n.key);
-      if (!layers.has(d)) layers.set(d, []);
-      layers.get(d).push(n);
-    });
-    const depthCount = layers.size || 1;
-    const colW = W / depthCount;
-    const positions = new Map();
-    [...layers.entries()].sort((a, b) => a[0] - b[0]).forEach(([, list], colIdx) => {
-      const rowH = H / (list.length + 1);
-      list.forEach((n, i) => positions.set(n.key, { x: colIdx * colW + colW / 2, y: rowH * (i + 1) }));
-    });
-    const edges = this.planNodes.flatMap((n) =>
-      (n.depends_on || []).map((dep) => {
-        const a = positions.get(dep), b = positions.get(n.key);
-        if (!a || !b) return "";
-        const cx = (a.x + b.x) / 2;
-        return `<path class="edge" d="M ${a.x + 60} ${a.y} C ${cx} ${a.y}, ${cx} ${b.y}, ${b.x - 60} ${b.y}" />`;
-      })
-    ).join("");
-    const rects = this.planNodes.map((n) => {
-      const p = positions.get(n.key);
-      if (!p) return "";
-      return `<g transform="translate(${p.x - 60} ${p.y - 16})" data-key="${escape(n.key)}">
-        <rect class="node-rect ${n.status}" x="0" y="0" width="120" height="32" />
-        <text x="60" y="20" text-anchor="middle">${escape(n.key)}</text>
-      </g>`;
-    }).join("");
-    svg.innerHTML = `${edges}${rects}`;
-  }
-
-  _setNodeStatus(key, status) {
-    const node = this.planNodes.find((n) => n.key === key);
-    if (node) node.status = status;
-    const rect = this.planCardEl?.querySelector(`g[data-key="${CSS.escape(key)}"] rect`);
-    if (rect) { rect.classList.remove("PENDING", "RUNNING", "COMPLETED", "FAILED"); rect.classList.add(status); }
-  }
-
-  _onAgentHired(evt) {
-    const ak = evt.payload.agent_key;
-    if (this.agents.has(ak)) return;
-    const role = evt.payload.role || "";
-    const objective = evt.payload.objective || "";
-    const monogram = ak.slice(0, 2).toUpperCase();
-    const html = `
-      <article class="card agent-card" data-agent="${escape(ak)}">
-        <header class="agent-head">
-          <div class="left">
-            <div class="avatar" style="width:28px;height:28px;border-radius:8px;font-size:11px;">${escape(monogram)}</div>
-            <div class="col" style="min-width:0;">
-              <div class="agent-name">${escape(ak)} <span class="agent-role">· ${escape(role)}</span></div>
-              <div class="muted" style="font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${escape(objective)}</div>
-            </div>
-          </div>
-          <div class="agent-status">
-            <span class="pill" data-pill><span class="dot"></span> hired</span>
-            <span class="chev">›</span>
-          </div>
-        </header>
-        <div class="agent-body">
-          <div class="inner">
-            <ul class="agent-thoughts" data-thoughts></ul>
-            <div class="agent-output" data-output hidden></div>
-          </div>
-        </div>
-      </article>`;
-    const cardWrap = this.appendCard(html);
-    const cardEl = cardWrap.querySelector(".agent-card");
-    cardEl.querySelector(".agent-head").addEventListener("click", () => cardEl.classList.toggle("open"));
-    if (this.agents.size < 3) cardEl.classList.add("open");
-    this.agents.set(ak, {
-      role, objective, cardEl,
-      statusPill: cardEl.querySelector("[data-pill]"),
-      thoughtsList: cardEl.querySelector("[data-thoughts]"),
-      outputEl: cardEl.querySelector("[data-output]"),
-    });
-    if (!this.planNodes.find((n) => n.key === ak)) {
-      this.planNodes.push({ key: ak, role, objective, depends_on: evt.payload.depends_on || [], status: "PENDING" });
-      this._renderPlanGraph();
-    }
-  }
-
-  _onAgentStatus(evt, status) {
-    const ak = evt.payload.agent_key;
-    const a = this.agents.get(ak);
-    this._setNodeStatus(ak, status);
-    if (!a) return;
-    const pillTextMap = { RUNNING: "running", COMPLETED: "done", FAILED: "failed" };
-    const klass = status === "FAILED" ? "pivot" : status === "RUNNING" ? "live" : "";
-    a.statusPill.className = `pill ${klass}`;
-    a.statusPill.innerHTML = `<span class="dot"></span> ${pillTextMap[status] || status.toLowerCase()}`;
-  }
-
-  _onAgentMessage(evt) {
-    const a = this.agents.get(evt.payload.agent_key);
-    if (!a) return;
-    const li = document.createElement("li");
-    li.className = "agent-thought";
-    li.textContent = evt.payload.text || "";
-    a.thoughtsList.appendChild(li);
-  }
-
-  _onAgentOutput(evt) {
-    const a = this.agents.get(evt.payload.agent_key);
-    if (!a) return;
-    a.outputEl.hidden = false;
-    a.outputEl.textContent = JSON.stringify(evt.payload.output ?? {}, null, 2);
-  }
-
-  _onPivot(evt) {
-    this.appendCard(`
-      <div class="pivot-ribbon">
-        <div class="avatar pivot" style="width:28px;height:28px;border-radius:8px;font-size:11px;">↻</div>
-        <div>
-          <div class="label">Pivot requested</div>
-          <div>${escape(evt.payload.rationale || "")}</div>
-          <div class="muted mono" style="font-size:11px;margin-top:6px;">trigger · ${escape(evt.payload.trigger_agent || "")}</div>
-        </div>
-      </div>`);
-  }
-
-  _onApprovalRequested(evt) {
-    const p = evt.payload || {};
-    this.appendCard(`
-      <div class="pivot-ribbon">
-        <div class="avatar pivot" style="width:28px;height:28px;border-radius:8px;font-size:11px;">?</div>
-        <div>
-          <div class="label">Approval required</div>
-          <div>${escape(p.message || "Review the plan and approve or reject.")}</div>
-          <div style="margin-top:8px;display:flex;gap:8px;">
-            <button class="btn primary small" onclick="controlAction('approve')">Approve</button>
-            <button class="btn ghost small" onclick="controlAction('reject')">Reject</button>
-          </div>
-        </div>
-      </div>`);
-  }
-
-  _onEvidence(evt) {
-    const p = evt.payload || {};
-    const sectionsHtml = (p.sections || []).map((s) => {
-      const factsHtml = (s.key_facts || []).map((f) => `<li>${escape(f)}</li>`).join("");
-      return `<div class="evidence-section">
-        ${s.title ? `<h4 class="section-title">${escape(s.title)}</h4>` : ""}
-        ${s.content ? `<p class="section-content">${escape(s.content)}</p>` : ""}
-        ${factsHtml ? `<ul class="key-facts">${factsHtml}</ul>` : ""}
-      </div>`;
-    }).join("");
-    const recsHtml = (p.recommendations || []).map((r) => `<div class="rec">→ ${escape(r)}</div>`).join("");
-    let findingsHtml = "";
-    if (!p.sections?.length && p.findings?.length) {
-      findingsHtml = `<div class="findings">${(p.findings || []).map((f) =>
-        `<div class="finding severity-${escape(f.severity || "low")}"><span class="mono">${escape((f.severity || "low").toUpperCase())}</span><span>${escape(f.text || "")}</span></div>`
-      ).join("")}</div>`;
-    }
-    const chartHtml = p.chart ? `<div class="chart-host"><div class="chart-title">${escape(p.chart.title || "")}</div>${renderChart(p.chart)}</div>` : "";
-    this.evidenceEl = this.appendCard(`
-      <div class="evidence">
-        <span class="pill"><span class="dot"></span> Report ready</span>
-        <div class="headline">${escape(p.headline || "Analysis Complete")}</div>
-        <div class="summary">${escape(p.summary || "")}</div>
-        ${sectionsHtml ? `<div class="evidence-sections">${sectionsHtml}</div>` : ""}
-        ${chartHtml}${findingsHtml}
-        ${recsHtml ? `<div class="recs">${recsHtml}</div>` : ""}
-      </div>`);
-  }
-
-  // SSE wiring — uses ?token= because EventSource can't send custom headers
-  startStream() {
-    if (this.eventSource) this.eventSource.close();
-    const token = _apiKey ? `?token=${encodeURIComponent(_apiKey)}` : "";
-    const es = new EventSource(`/api/v1/sessions/${this.sessionId}/stream${token}`);
-    es.onmessage = (msg) => {
-      try { this.handleEvent(JSON.parse(msg.data)); } catch (err) { console.error("bad event", err); }
-    };
-    [
-      "SESSION_CREATED","SESSION_RUNNING","SESSION_PAUSED","SESSION_COMPLETED","SESSION_FAILED","SESSION_CANCELLED","SESSION_RESUMED",
-      "THREAD_CREATED","THREAD_PLANNING","THREAD_PLANNING_STARTED","THREAD_RUNNING",
-      "THREAD_COMPLETED","THREAD_FAILED","THREAD_CANCELLED","THREAD_PAUSED",
-      "BUDGET_RESERVED","BUDGET_CONSUMED","BUDGET_EXCEEDED",
-      "PLAN_CREATED","PLAN_APPROVED","PLAN_REJECTED","PLAN_EXECUTION_STARTED","PLAN_COMPLETED",
-      "AGENT_HIRED","AGENT_RUNNING","AGENT_COMPLETED","AGENT_FAILED",
-      "AGENT_MESSAGE","AGENT_OUTPUT",
-      "COMMANDER_MESSAGE","PIVOT_REQUESTED","PIVOT_APPLIED",
-      "HUMAN_APPROVAL_REQUESTED","HUMAN_INPUT_RECEIVED",
-      "EVIDENCE_PUBLISHED",
-    ].forEach((t) => {
-      es.addEventListener(t, (msg) => {
-        try { this.handleEvent(JSON.parse(msg.data)); } catch (_) {}
-      });
-    });
-    es.addEventListener("end", () => es.close());
-    es.onerror = () => {};
-    this.eventSource = es;
-  }
-
-  closeStream() {
-    if (this.eventSource) this.eventSource.close();
-  }
-}
-
-// ---------------------------------------------------------------
-// Charts (pure SVG — unchanged)
-// ---------------------------------------------------------------
-
-function renderChart(chart) {
-  if (!chart) return "";
-  if (chart.type === "bar") return renderBarChart(chart);
-  if (chart.type === "donut") return renderDonut(chart);
-  if (chart.type === "scorecard") return renderScorecard(chart);
-  return "";
-}
-
-function renderBarChart(chart) {
-  const series = chart.series || [];
-  const W = 540, H = 200, P = 28;
-  const max = Math.max(1, ...series.map((s) => s.value));
-  const colW = (W - P * 2) / series.length;
-  const bars = series.map((s, i) => {
-    const h = (s.value / max) * (H - P * 2);
-    const x = P + i * colW + 12, y = H - P - h, w = colW - 24;
-    return `<rect class="bar" x="${x}" y="${y}" width="${w}" height="${h}" rx="6" />
-      <text class="bar-value" x="${x + w / 2}" y="${y - 6}" text-anchor="middle">${escape(s.value)}</text>
-      <text class="bar-label" x="${x + w / 2}" y="${H - 8}" text-anchor="middle">${escape(s.label)}</text>`;
-  }).join("");
-  return `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" style="width:100%;height:200px;">
-    <defs><linearGradient id="brand-grad" x1="0" x2="0" y1="0" y2="1">
-      <stop offset="0" stop-color="#7c5cff"/><stop offset="1" stop-color="#29c0ff"/>
-    </linearGradient></defs>${bars}</svg>`;
-}
-
-function renderDonut(chart) {
-  const series = chart.series || [];
-  const total = series.reduce((s, x) => s + x.value, 0) || 1;
-  const cx = 110, cy = 100, r = 64, sw = 18, C = 2 * Math.PI * r;
-  const palette = ["#7c5cff","#29c0ff","#5fffd0","#ffb44d"];
-  let offset = 0;
-  const segments = series.map((s, i) => {
-    const len = (s.value / total) * C;
-    const seg = `<circle class="donut-segment" cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="${palette[i % palette.length]}" stroke-width="${sw}" stroke-dasharray="${len} ${C - len}" stroke-dashoffset="${-offset}" transform="rotate(-90 ${cx} ${cy})" stroke-linecap="butt" />`;
-    offset += len; return seg;
-  }).join("");
-  const legend = series.map((s, i) =>
-    `<div style="display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--text-2);">
-      <span style="width:10px;height:10px;border-radius:3px;background:${palette[i % palette.length]};"></span>
-      ${escape(s.label)} <span class="muted mono" style="margin-left:auto;">${escape(s.value)}%</span>
-    </div>`).join("");
-  return `<div style="display:grid;grid-template-columns:220px 1fr;gap:16px;align-items:center;">
-    <svg viewBox="0 0 220 200" style="width:220px;height:200px;">${segments}</svg>
-    <div style="display:flex;flex-direction:column;gap:6px;">${legend}</div></div>`;
-}
-
-function renderScorecard(chart) {
-  const rows = (chart.series || []).map((s) =>
-    `<div style="display:grid;grid-template-columns:120px 1fr 48px;gap:10px;align-items:center;font-size:13px;color:var(--text-2);">
-      <div class="mono" style="color:var(--text-3);">${escape(s.label)}</div>
-      <div style="height:8px;border-radius:4px;background:rgba(255,255,255,0.05);overflow:hidden;">
-        <div style="height:100%;width:${Math.min(100,s.value)}%;background:var(--grad-brand);"></div>
-      </div>
-      <div class="mono" style="text-align:right;">${escape(s.value)}</div>
-    </div>`).join("");
-  return `<div style="display:flex;flex-direction:column;gap:8px;">${rows}</div>`;
-}
-
-// ---------------------------------------------------------------
-// App state
-// ---------------------------------------------------------------
-
-const appState = {
-  currentThread: null,
-  sessions: [],
-};
-
-// ---------------------------------------------------------------
-// Session list
-// ---------------------------------------------------------------
-
-function renderSessionList() {
-  const host = $("#sessionList");
-  if (!host) return;
-  $("#sessionCount").textContent = appState.sessions.length;
-  host.innerHTML = appState.sessions.map((s) => {
-    const active = appState.currentThread?.sessionId === s.session_id;
-    return `<div class="thread-row ${active ? "active" : ""}" data-id="${escape(s.session_id)}">
-      <div class="t-title">${escape(s.title || "Untitled")}</div>
-      <div class="t-sub">${escape(s.objective || "").slice(0, 80)}</div>
-      <div class="t-sub mono">${escape(s.status || "CREATED")} · #${escape(s.session_id.slice(0, 6))}</div>
-    </div>`;
-  }).join("");
-  host.querySelectorAll(".thread-row").forEach((row) => {
-    row.addEventListener("click", () => switchSession(row.dataset.id));
+  preset.addEventListener("change",()=>{
+    const isAnthropic=rt.value==="direct_anthropic";
+    const dict=isAnthropic?ANTHROPIC_PRESETS:PRESETS;
+    const p=dict[preset.value];if(p){$("#newRunBaseUrl").value=p.base_url;$("#newRunModel").value=p.model}
   });
+  // Init: DeepSeek preset (universal is default selected)
+  preset.value="deepseek";const p=PRESETS["deepseek"];$("#newRunBaseUrl").value=p.base_url;$("#newRunModel").value=p.model;
 }
 
-async function refreshSessions() {
-  const data = await api("/api/v1/sessions");
-  appState.sessions = data || [];
-  renderSessionList();
+async function deployRun(){
+  const obj=$("#newRunObjective").value.trim();if(!obj){showToast("Enter an objective for the agent",true);return}
+  const rt=$("#newRunRuntime").value||"universal",model=RUNTIME_MODELS[rt]||"universal:configured";
+  const body={objective:obj,runtime:rt,model,timeout_seconds:parseInt($("#newRunTimeout").value)||1800};
+  if(rt==="universal"||rt==="direct_anthropic")body.provider={base_url:$("#newRunBaseUrl").value.trim(),api_key:$("#newRunApiKey").value.trim(),model:$("#newRunModel").value.trim()};
+  // Save provider config
+  const pc=loadPC();pc._last={base_url:$("#newRunBaseUrl").value,api_key:$("#newRunApiKey").value,model:$("#newRunModel").value,preset:$("#newRunPreset").value};savePC(pc);
+
+  const btn=$("#deployBtn"),hint=$("#deployHint");btn.disabled=true;btn.textContent="Deploying...";hint.textContent="";
+  try{
+    const d=await api("/api/v1/sessions",{method:"POST",body:JSON.stringify(body)});
+    state.sessions.unshift({session_id:d.session_id,title:d.title||`Run: ${rt}`,objective:obj,status:d.status,runtime:rt});
+    // Clear form
+    $("#newRunObjective").value="";
+    // Navigate to run detail
+    switchView("run-detail",d.session_id);
+  }catch(e){showToast("Failed: "+e.message,true)}
+  btn.disabled=false;btn.textContent="Deploy Agent";
 }
 
-// ---------------------------------------------------------------
-// Agent library / category filter
-// ---------------------------------------------------------------
+// ── Run detail (with tabs) ───────────────────────────────────
+let _activeThread=null;
 
-let currentCategoryFilter = null;
-let cachedCategories = null;
+async function renderRunDetail(sessionId){
+  if(_activeThread){_activeThread.closeStream();_activeThread=null}
+  // Clear
+  $("#transcript").innerHTML="";$("#eventFeed").innerHTML="";$("#eventCount").textContent="";
+  $("#configGrid").innerHTML="";$("#apiSseUrl").textContent="—";
+  $("#pauseBtn").disabled=true;$("#resumeBtn").disabled=true;$("#cancelBtn").disabled=true;
+  switchTab("transcript");
 
-async function loadCategories() {
-  if (cachedCategories) return cachedCategories;
-  try {
-    const data = await api("/api/v1/agents/categories");
-    cachedCategories = data.categories || [];
-  } catch (_) { cachedCategories = []; }
-  return cachedCategories;
-}
+  try{
+    const s=await api(`/api/v1/sessions/${sessionId}`);
+    $("#detailTitle").textContent=s.title||"Run Detail";
+    $("#detailId").textContent=`ID: ${s.session_id}`;
+    // Config tab
+    $("#configGrid").innerHTML=`<div class="config-item"><label>Runtime</label><div class="config-val">${esc(s.runtime||"—")}</div></div><div class="config-item"><label>Model</label><div class="config-val">${esc(s.model||"—")}</div></div><div class="config-item"><label>Status</label><div class="config-val"><span class="badge ${s.status==="COMPLETED"?"badge-success":s.status==="FAILED"?"badge-error":"badge-info"}">${esc(s.status||"—")}</span></div></div><div class="config-item"><label>Objective</label><div class="config-val" style="font-family:var(--font);font-size:13px">${esc(s.objective||"—")}</div></div>`;
+    // API tab
+    const token=_apiKey?`?token=${encodeURIComponent(_apiKey)}`:"";$("#apiSseUrl").textContent=`GET /api/v1/sessions/${s.session_id}/stream${token}`;
+    // Sidebar context
+    $("#sidebarRunContext").style.display="";$("#sidebarRunTitle").textContent=s.title||"—";$("#sidebarRunId").textContent=s.session_id.slice(0,8);$("#sidebarRunStatus").innerHTML=`<span class="dot"></span>${esc((s.status||"unknown").toLowerCase())}`;
 
-async function renderCategoryPills(categories) {
-  const host = $("#category-filter-row");
-  if (!host) return;
-  host.innerHTML = "";
-  const all = document.createElement("button");
-  all.className = `category-pill${currentCategoryFilter === null ? " active" : ""}`;
-  all.textContent = "All";
-  all.addEventListener("click", () => { currentCategoryFilter = null; refreshAgents(); });
-  host.appendChild(all);
-  (categories || []).forEach((cat) => {
-    const btn = document.createElement("button");
-    btn.className = `category-pill${currentCategoryFilter === cat ? " active" : ""}`;
-    btn.textContent = cat;
-    btn.addEventListener("click", () => { currentCategoryFilter = cat; refreshAgents(); });
-    host.appendChild(btn);
-  });
-}
-
-async function refreshAgents() {
-  try {
-    const cats = await loadCategories();
-    await renderCategoryPills(cats);
-
-    const url = currentCategoryFilter
-      ? `/api/v1/agents?category=${encodeURIComponent(currentCategoryFilter)}`
-      : "/api/v1/agents";
-    const data = await api(url).catch(() => api("/api/v1/mcp-servers"));
-    const agents = data || [];
-    const host = $("#agentList");
-    $("#agentCount").textContent = agents.length;
-
-    if (agents.length === 0) {
-      host.innerHTML = `<div class="empty-state">No agents found. <strong>+ MCP Server</strong> to connect external tools.</div>`;
-      return;
+    // Always connect the SSE stream — for COMPLETED/FAILED sessions the
+    // server replays stored events; for RUNNING sessions it streams live.
+    const tv=new ThreadView(s.session_id,s.title,s.objective);_activeThread=tv;tv.startStream();
+    if(s.status==="RUNNING"||s.status==="PLANNING"||s.status==="CREATED"){
+      $("#pauseBtn").disabled=false;$("#cancelBtn").disabled=false;
     }
-    host.innerHTML = agents.map((a) => {
-      const badge = a.category
-        ? `<span class="agent-category-badge">${escape(a.category)}</span>`
-        : a.transport ? `<span class="agent-category-badge">${escape(a.transport)}</span>` : "";
-      const name = (a.name || "").replace(/^seed\//, "");
-      return `<div class="agent-row" data-name="${escape(a.name || name)}">
-        <div class="agent-row-name">${escape(name)}${badge}</div>
-        <div class="agent-row-desc mono" style="font-size:11px;">${escape((a.description || a.upstream || "").slice(0, 60))}</div>
-      </div>`;
-    }).join("");
-    host.querySelectorAll(".agent-row").forEach((row) => {
-      row.addEventListener("click", () => showAgentDetail(row.dataset.name));
-    });
-  } catch (_) { /* ignore on first boot */ }
+    // Close the stream when it receives the end sentinel
+    tv.eventSource?.addEventListener("end",()=>{tv.closeStream();});
+  }catch(e){showToast("Failed to load run: "+e.message,true)}
 }
 
-async function showAgentDetail(name) {
-  try {
-    const agent = await api(`/api/v1/agents/${encodeURIComponent(name)}`);
-    const displayName = (agent.name || name).replace(/^seed\//, "");
-    const catBadge = agent.category ? `<span class="agent-category-badge" style="margin-left:8px;">${escape(agent.category)}</span>` : "";
-    const typTag = agent.agent_type ? `<span class="agent-type-tag" style="margin-left:6px;">${escape(agent.agent_type.toUpperCase())}</span>` : "";
-    $("#agentDetailName").innerHTML = `${escape(displayName)}${catBadge}${typTag}`;
+// ── ThreadView (streaming) ───────────────────────────────────
+class ThreadView{
+  constructor(sid,title,obj){this.sessionId=sid;this.title=title;this.objective=obj;this.status="CREATED";this.agents=new Map;this.eventSource=null;this.evCount=0;this.planNodes=[]}
 
-    let html = `
-      <div class="detail-section">
-        <div class="detail-label">Description</div>
-        <div class="detail-value">${escape(agent.description || "—")}</div>
-      </div>
-      <div class="detail-section">
-        <div class="detail-label">Capabilities</div>
-        <div class="detail-value">${(agent.capabilities || []).map((c) => `<span class="cap-tag">${escape(c)}</span>`).join(" ") || "None"}</div>
-      </div>`;
+  _el(cls,who,body){
+    const d=document.createElement("div");d.className="msg";d.innerHTML=`<div class="${cls}">${who?`<div class="${cls.includes("user")?"":cls.includes("agent")?"ma-who":cls.includes("tool")?"mt-who":cls.includes("result")?"mr-who":"ma-who"}">${esc(who)}</div>`:""}${body}</div>`;
+    $("#transcript").appendChild(d);this._scroll();return d;
+  }
+  _card(h){const d=document.createElement("div");d.className="msg";d.innerHTML=h;$("#transcript").appendChild(d);this._scroll();return d}
+  _scroll(){const c=$("#transcript").parentElement;if(c)c.scrollTop=c.scrollHeight}
 
-    if (agent.agent_type === "llm" && agent.system_prompt) {
-      html += `<div class="detail-section">
-        <div class="detail-label">System Prompt</div>
-        <details class="system-prompt-details"><summary>Show</summary><pre>${escape(agent.system_prompt)}</pre></details>
-      </div>`;
+  _pushEvent(evt){this.evCount++;$("#eventCount").textContent=this.evCount;const kl=evt.type?.includes("FAILED")?"err":evt.type?.startsWith("PIVOT")?"warn":"";const r=document.createElement("div");r.className=`ev-item ${kl}`;r.innerHTML=`<span class="ev-seq">#${evt.sequence??"?"}</span><span class="ev-type">${esc(evt.type)}</span>`;$("#eventFeed").appendChild(r)}
+
+  handleEvent(evt){
+    this._pushEvent(evt);
+    switch(evt.type){
+      case "SESSION_CREATED":case "THREAD_CREATED":break;
+      case "BUDGET_RESERVED":case "BUDGET_CONSUMED":this._budget(evt);break;
+      case "THREAD_PLANNING":case "THREAD_PLANNING_START":this._status("PLANNING");this._el("msg-cmd","",`<span class="thinking"><span></span><span></span><span></span></span> Planning the work…`);break;
+      case "THREAD_PAUSED":case "SESSION_PAUSED":this._status("PAUSED");break;
+      case "COMMANDER_MESSAGE":this._el("msg-cmd","Commander",esc(evt.payload?.text||""));break;
+      case "PLAN_CREATED":this._plan(evt);break;
+      case "THREAD_RUNNING":case "SESSION_RUNNING":this._status("RUNNING");$("#pauseBtn").disabled=false;$("#cancelBtn").disabled=false;break;
+      case "AGENT_HIRED":this._agentHired(evt);break;
+      case "AGENT_RUNNING":this._agentStatus(evt,"RUNNING");break;
+      case "AGENT_COMPLETED":this._agentStatus(evt,"COMPLETED");break;
+      case "AGENT_FAILED":this._agentStatus(evt,"FAILED");break;
+      case "AGENT_MESSAGE":this._agentMsg(evt);break;
+      case "AGENT_OUTPUT":this._agentOut(evt);break;
+      case "PIVOT_REQUESTED":this._card(`<div class="pivot-card"><div class="pv-label">Pivot requested</div><div class="pv-text">${esc(evt.payload?.rationale||"")}</div></div>`);break;
+      case "HUMAN_APPROVAL_REQUESTED":this._card(`<div class="pivot-card"><div class="pv-label">Approval required</div><div class="pv-text">${esc(evt.payload?.message||"")}</div><div class="pv-actions"><button class="btn btn-primary btn-sm" onclick="controlAction('approve')">Approve</button><button class="btn btn-ghost btn-sm" onclick="controlAction('reject')">Reject</button></div></div>`);break;
+      case "EVIDENCE_PUBLISHED":this._evidence(evt);break;
+      case "HARNESS_MESSAGE":this._harnessMsg(evt);break;
+      case "HARNESS_TOOL_CALLED":this._harnessTool(evt);break;
+      case "HARNESS_TOOL_RESULT":this._harnessResult(evt);break;
+      case "THREAD_COMPLETED":case "SESSION_COMPLETED":this._status("COMPLETED");$("#pauseBtn").disabled=true;$("#cancelBtn").disabled=true;break;
+      case "THREAD_FAILED":case "SESSION_FAILED":this._status("FAILED");$("#pauseBtn").disabled=true;$("#cancelBtn").disabled=true;break;
+      case "THREAD_CANCELLED":case "SESSION_CANCELLED":this._status("CANCELLED");$("#pauseBtn").disabled=true;$("#cancelBtn").disabled=true;break;
+      case "end":this.closeStream();break;
     }
-    $("#agentDetailBody").innerHTML = html;
-    $("#agentDetailModal").style.display = "flex";
-  } catch (err) {
-    showToast("Failed to load agent: " + err.message, true);
-  }
-}
-
-function closeAgentDetail() {
-  $("#agentDetailModal").style.display = "none";
-}
-
-// ---------------------------------------------------------------
-// Session lifecycle
-// ---------------------------------------------------------------
-
-function clearTranscript() {
-  const t = $("#transcript");
-  // Keep welcome panel if it exists but hide it
-  const wp = $("#welcomePanel");
-  t.innerHTML = "";
-  if (wp) {
-    wp.style.display = "none";
-    t.appendChild(wp);
-  }
-  $("#eventFeed").innerHTML = "";
-  $("#budgetFill").style.width = "0%";
-  $("#budgetConsumed").textContent = "$0.00 consumed";
-  $("#budgetLimit").textContent = "/ $12.00";
-  $("#infoRuntime").textContent = "—";
-  $("#infoSession").textContent = "—";
-  $("#infoStatus").textContent = "—";
-}
-
-async function createSession(objective) {
-  if (appState.currentThread) appState.currentThread.closeStream();
-  clearTranscript();
-
-  const runtime = $("#runtimeSelect")?.value || "echo";
-  const model = RUNTIME_MODELS[runtime] || "echo:test";
-
-  const body = { objective, runtime, model, timeout_seconds: 1800 };
-
-  if (runtime === "universal") {
-    const base_url = $("#providerBaseUrl")?.value?.trim() || "";
-    const api_key = $("#providerApiKey")?.value?.trim() || "";
-    const provModel = $("#providerModel")?.value?.trim() || "";
-    body.provider = { base_url, api_key, model: provModel };
   }
 
-  const data = await api("/api/v1/sessions", {
-    method: "POST",
-    body: JSON.stringify(body),
-  });
-
-  const view = new ThreadView(data.session_id, data.title || `Session: ${runtime}`, objective);
-  appState.currentThread = view;
-  appState.sessions = [
-    { session_id: data.session_id, title: data.title || `Session: ${runtime}`, objective, status: data.status },
-    ...appState.sessions.filter((x) => x.session_id !== data.session_id),
-  ];
-  renderSessionList();
-
-  // Show runtime in info panel
-  $("#infoRuntime").textContent = runtime;
-  $("#infoSession").textContent = data.session_id.slice(0, 8);
-
-  // Echo user message
-  view.appendMessage({ avatarClass: "user", avatarText: "U", who: "You", klass: "user", body: escape(objective) });
-
-  view.startStream();
-}
-
-async function switchSession(sessionId) {
-  if (appState.currentThread?.sessionId === sessionId) return;
-  if (appState.currentThread) appState.currentThread.closeStream();
-  clearTranscript();
-
-  const s = await api(`/api/v1/sessions/${sessionId}`);
-  const view = new ThreadView(s.session_id, s.title, s.objective);
-  appState.currentThread = view;
-  renderSessionList();
-
-  $("#infoRuntime").textContent = s.runtime || "—";
-  $("#infoSession").textContent = s.session_id.slice(0, 8);
-  $("#infoStatus").textContent = s.status?.toLowerCase() || "—";
-
-  view.startStream();
-}
-
-async function controlAction(action) {
-  if (!appState.currentThread) return;
-  await api(`/api/v1/sessions/${appState.currentThread.sessionId}/${action}`, { method: "POST" });
-}
-
-// ---------------------------------------------------------------
-// MCP Server modal
-// ---------------------------------------------------------------
-
-function openMcpModal() {
-  if ($("#mcpName")) $("#mcpName").value = "";
-  if ($("#mcpTransport")) $("#mcpTransport").value = "stdio";
-  if ($("#mcpUpstream")) $("#mcpUpstream").value = "";
-  $("#mcpModal").style.display = "flex";
-}
-
-function closeMcpModal() {
-  $("#mcpModal").style.display = "none";
-}
-
-async function createMcpServer() {
-  const name = $("#mcpName").value.trim();
-  const transport = $("#mcpTransport").value;
-  const upstream = $("#mcpUpstream").value.trim();
-  if (!name || !upstream) { showToast("Name and Upstream are required", true); return; }
-  try {
-    try {
-      await api("/api/v1/mcp-servers", { method: "POST", body: JSON.stringify({ name, transport, upstream }) });
-    } catch (err) {
-      if (err.message.includes("409")) {
-        await api(`/api/v1/mcp-servers/${name}`, { method: "DELETE" });
-        await api("/api/v1/mcp-servers", { method: "POST", body: JSON.stringify({ name, transport, upstream }) });
-      } else throw err;
-    }
-    closeMcpModal();
-    showToast(`MCP server "${name}" registered.`);
-    await refreshAgents();
-  } catch (err) {
-    showToast("Failed to register MCP server: " + err.message, true);
+  _status(s){
+    this.status=s;const b=$("#statusBadge");
+    if(s==="RUNNING"||s==="PLANNING")b.innerHTML='<span class="sdot sdot-running dot-live"></span> running',b.className="nav-badge";
+    else if(s==="COMPLETED")b.innerHTML='<span class="sdot sdot-completed"></span> completed',b.className="nav-badge";
+    else if(s==="FAILED")b.innerHTML='<span class="sdot sdot-failed"></span> failed',b.className="nav-badge";
+    else b.innerHTML=`<span class="sdot sdot-created"></span> ${s.toLowerCase()}`,b.className="nav-badge";
+    $("#sidebarRunStatus").innerHTML=`<span class="dot${s==="RUNNING"||s==="PLANNING"?" dot-live":""}"></span>${s.toLowerCase()}`;
   }
+  _budget(e){/* simplified */}
+
+  _plan(e){
+    this.planNodes=(e.payload.graph?.nodes||[]).map(n=>({...n,status:"PENDING"}));
+    const h=`<div class="plan-card"><div class="pc-head"><div style="display:flex;align-items:center;gap:8px"><span class="badge badge-info">Plan ${esc(e.payload.plan_number??1)}</span><span style="font-weight:600;font-size:13px">Hiring ${this.planNodes.length} specialist${this.planNodes.length!==1?"s":""}</span></div><span class="text-mono text-muted">${esc((e.payload.plan_id||"").slice(0,8))}</span></div><div class="pc-body"><p style="font-size:13.5px;color:var(--text-secondary);margin-bottom:var(--s-3)">${esc(e.payload.rationale||"")}</p><svg class="plan-graph" viewBox="0 0 600 200"></svg></div></div>`;
+    const c=this._card(h);this._drawPlan(c.querySelector(".plan-graph"));
+  }
+  _drawPlan(svg){if(!svg)return;const W=600,H=200,ns=this.planNodes;const depthOf=(k,seen=new Set)=>{if(seen.has(k))return 0;seen.add(k);const n=ns.find(x=>x.key===k);if(!n||!n.depends_on?.length)return 0;return 1+Math.max(...n.depends_on.map(d=>depthOf(d,seen)))};const layers=new Map;ns.forEach(n=>{const d=depthOf(n.key);if(!layers.has(d))layers.set(d,[]);layers.get(d).push(n)});const dc=layers.size||1,cw=W/dc,pos=new Map;[...layers.entries()].sort((a,b)=>a[0]-b[0]).forEach(([,list],ci)=>{const rh=H/(list.length+1);list.forEach((n,i)=>pos.set(n.key,{x:ci*cw+cw/2,y:rh*(i+1)}))});const edges=ns.flatMap(n=>(n.depends_on||[]).map(dep=>{const a=pos.get(dep),b=pos.get(n.key);if(!a||!b)return"";return`<path class="edge" d="M ${a.x+60} ${a.y} C ${(a.x+b.x)/2} ${a.y}, ${(a.x+b.x)/2} ${b.y}, ${b.x-60} ${b.y}"/>`})).join("");const rects=ns.map(n=>{const p=pos.get(n.key);if(!p)return"";return`<g transform="translate(${p.x-60} ${p.y-16})" data-key="${esc(n.key)}"><rect class="node-rect ${n.status}" x="0" y="0" width="120" height="32" rx="5"/><text x="60" y="20" text-anchor="middle">${esc(n.key)}</text></g>`}).join("");svg.innerHTML=edges+rects}
+
+  _agentHired(e){
+    const ak=e.payload.agent_key;if(this.agents.has(ak))return;const role=e.payload.role||"",obj=e.payload.objective||"",mg=ak.slice(0,2).toUpperCase();
+    const h=`<div class="ac-wrap" data-agent="${esc(ak)}"><div class="ac-head"><div class="ac-left"><div class="ac-avatar">${esc(mg)}</div><div><span class="ac-name">${esc(ak)}</span><span class="ac-role">${esc(role)}</span></div></div><div class="ac-status"><span class="badge" data-pill><span class="dot"></span>hired</span><span class="ac-chevron">&#8250;</span></div></div><div class="ac-body"><div class="ac-inner"><div data-thoughts></div><div class="ac-output" data-output hidden></div></div></div></div>`;
+    const w=this._card(h),card=w.querySelector(".ac-wrap");card.querySelector(".ac-head").addEventListener("click",()=>card.classList.toggle("open"));if(this.agents.size<3)card.classList.add("open");
+    this.agents.set(ak,{cardEl:card,pill:card.querySelector("[data-pill]"),thoughts:card.querySelector("[data-thoughts]"),output:card.querySelector("[data-output]")});
+  }
+  _agentStatus(e,s){const a=this.agents.get(e.payload.agent_key);if(!a)return;const bc=s==="FAILED"?"badge-error":s==="RUNNING"?"badge-info":"badge-success";a.pill.className=`badge ${bc}`;a.pill.innerHTML=`<span class="dot${s==="RUNNING"?" dot-live":""}"></span>${s.toLowerCase()}`}
+  _agentMsg(e){const a=this.agents.get(e.payload.agent_key);if(!a)return;const d=document.createElement("div");d.className="ac-thought";d.textContent=e.payload.text||"";a.thoughts.appendChild(d)}
+  _agentOut(e){const a=this.agents.get(e.payload.agent_key);if(!a)return;a.output.hidden=false;a.output.textContent=JSON.stringify(e.payload.output??{},null,2)}
+
+  _evidence(e){
+    const p=e.payload||{};const sh=(p.sections||[]).map(s=>`<div class="ev-section">${s.title?`<h4>${esc(s.title)}</h4>`:""}${s.content?`<p>${esc(s.content)}</p>`:""}${(s.key_facts||[]).length?`<ul class="ev-facts">${s.key_facts.map(f=>`<li>${esc(f)}</li>`).join("")}</ul>`:""}</div>`).join("");
+    const rh=(p.recommendations||[]).map(r=>`<div class="rec">${esc(r)}</div>`).join("");
+    let fh="";if(!p.sections?.length&&p.findings?.length)fh=`<div class="findings">${p.findings.map(f=>`<div class="finding severity-${esc(f.severity||"low")}"><span class="text-mono">${esc((f.severity||"low").toUpperCase())}</span><span>${esc(f.text||"")}</span></div>`).join("")}</div>`;
+    this._card(`<div class="ev-card"><span class="badge badge-success" style="margin-bottom:8px">Report ready</span><div class="ev-headline">${esc(p.headline||"Analysis Complete")}</div><div class="ev-summary">${esc(p.summary||"")}</div>${sh?`<div class="ev-sections">${sh}</div>`:""}${fh}${rh?`<div class="recs">${rh}</div>`:""}</div>`);
+  }
+
+  _harnessMsg(e){const t=e.payload?.text||"";if(!t)return;this._el("msg-agent","Agent",`<div class="ma-text">${esc(t).replace(/\n/g,"<br>").replace(/```(\w*)\n([\s\S]*?)```/g,(_,lang,code)=>`<pre class="mt-code">${esc(code.trim())}</pre>`).replace(/\*\*(.+?)\*\*/g,"<strong>$1</strong>")}</div>`)}
+  _harnessTool(e){const tool=e.payload?.tool||"tool",input=e.payload?.input||{};const istr=typeof input==="object"?JSON.stringify(input):String(input);const preview=istr.length>150?istr.slice(0,150)+"...":istr;this._el("msg-tool",tool,`<div class="mt-toggle" onclick="this.nextElementSibling.classList.toggle('open')"><span class="mt-cmd">${esc(preview)}</span></div><div class="mt-detail">${esc(istr)}</div>`)}
+  _harnessResult(e){const o=String(e.payload?.output||"").trim();if(!o)return;const lines=o.split("\n");const preview=lines.slice(0,6).join("\n");const more=lines.length>6?`<div class="mr-more" onclick="this.previousElementSibling.classList.toggle('full');this.classList.toggle('on')">Show all ${lines.length} lines ▾</div>`:"";const full=lines.length>6?`<div class="mr-full">${esc(o).replace(/\n/g,"<br>")}</div>`:"";this._el("msg-result","Result",`<div class="mr-text">${esc(preview).replace(/\n/g,"<br>")}</div>${full}${more}`)}
+
+  async startStream(){
+    if(this.eventSource)this.eventSource.close();
+    // Ensure we have an API key before connecting (required for auth)
+    await ensureApiKey();
+    const t=_apiKey?`?token=${encodeURIComponent(_apiKey)}`:"";
+    const es=new EventSource(`/api/v1/sessions/${this.sessionId}/stream${t}`);
+    es.onmessage=msg=>{try{this.handleEvent(JSON.parse(msg.data))}catch(e){}};
+    es.onerror=()=>{};this.eventSource=es;
+  }
+  closeStream(){if(this.eventSource)this.eventSource.close()}
 }
 
-// ---------------------------------------------------------------
-// Toast
-// ---------------------------------------------------------------
+// ── Control ──────────────────────────────────────────────────
+async function controlAction(a){if(!_activeThread)return;await api(`/api/v1/sessions/${_activeThread.sessionId}/${a}`,{method:"POST"})}
+window.controlAction=controlAction;
 
-function showToast(message, isError = false) {
-  const toast = document.createElement("div");
-  toast.className = `toast ${isError ? "toast-error" : "toast-success"}`;
-  toast.textContent = message;
-  document.body.appendChild(toast);
-  requestAnimationFrame(() => toast.classList.add("visible"));
-  setTimeout(() => { toast.classList.remove("visible"); setTimeout(() => toast.remove(), 300); }, 3500);
+// ── MCP ──────────────────────────────────────────────────────
+function openMcpModal(){$("#mcpName").value="";$("#mcpTransport").value="stdio";$("#mcpUpstream").value="";$("#mcpModal").style.display="flex"}
+function closeMcpModal(){$("#mcpModal").style.display="none"}
+async function createMcpServer(){
+  const n=$("#mcpName").value.trim(),t=$("#mcpTransport").value,u=$("#mcpUpstream").value.trim();if(!n||!u){showToast("Name and Upstream are required",true);return}
+  try{try{await api("/api/v1/mcp-servers",{method:"POST",body:JSON.stringify({name:n,transport:t,upstream:u})})}catch(e){if(e.message.includes("409")){await api(`/api/v1/mcp-servers/${n}`,{method:"DELETE"});await api("/api/v1/mcp-servers",{method:"POST",body:JSON.stringify({name:n,transport:t,upstream:u})})}else throw e}closeMcpModal();showToast(`MCP server "${n}" registered.`);refreshToolsPage();refreshAgentsPage()}catch(e){showToast("Failed: "+e.message,true)}
 }
+window.openMcpModal=openMcpModal;window.closeMcpModal=closeMcpModal;window.createMcpServer=createMcpServer;
+window.deployRun=deployRun;
 
-// ---------------------------------------------------------------
-// Expose to inline onclick handlers (module scope)
-// ---------------------------------------------------------------
+// ── Toast ────────────────────────────────────────────────────
+function showToast(msg,err){const t=document.createElement("div");t.className=`toast ${err?"toast-err":"toast-ok"}`;t.textContent=msg;document.body.appendChild(t);requestAnimationFrame(()=>t.classList.add("on"));setTimeout(()=>{t.classList.remove("on");setTimeout(()=>t.remove(),300)},3500)}
 
-window.openMcpModal = openMcpModal;
-window.closeMcpModal = closeMcpModal;
-window.createMcpServer = createMcpServer;
-window.showAgentDetail = showAgentDetail;
-window.closeAgentDetail = closeAgentDetail;
-window.controlAction = controlAction;
+// ── State ────────────────────────────────────────────────────
+const state={sessions:[]};
 
-// ---------------------------------------------------------------
-// Boot
-// ---------------------------------------------------------------
-
-(async function boot() {
-  // Fetch dev API key first — sets the badge and stores the key
-  await ensureApiKey();
-
-  wireRuntimeSelector();
-
-  $("#composer").addEventListener("submit", (evt) => {
-    evt.preventDefault();
-    const value = $("#composerInput").value.trim();
-    if (!value) return;
-    $("#composerInput").value = "";
-    createSession(value).catch((err) => showToast("Could not start session: " + err.message, true));
-  });
-
-  $$(".chip").forEach((chip) => {
-    chip.addEventListener("click", () => {
-      $("#composerInput").value = chip.dataset.prompt || "";
-      $("#composerInput").focus();
-    });
-  });
-
-  $("#newSessionBtn").addEventListener("click", () => $("#composerInput").focus());
-  $("#pauseBtn").addEventListener("click", () => controlAction("pause"));
-  $("#resumeBtn").addEventListener("click", () => controlAction("resume"));
-  $("#cancelBtn").addEventListener("click", () => controlAction("cancel"));
-
-  try { await refreshSessions(); } catch (_) {}
-  try { await refreshAgents(); } catch (_) {}
+// ── Boot ─────────────────────────────────────────────────────
+window.switchView=switchView;window.switchTab=switchTab;
+(async function(){
+  await ensureApiKey();wireNewRunForm();
+  switchView("home");
+  // Composer
+  $("#composerInput")?.addEventListener("keydown",e=>{if(e.key==="Enter"){e.preventDefault();const v=$("#composerInput").value.trim();if(v){$("#composerInput").value="";/* TODO: follow-up message */}}});
+  $("#closeRunBtn")?.addEventListener("click",()=>{if(_activeThread)_activeThread.closeStream();switchView("runs")});
+  $("#pauseBtn")?.addEventListener("click",()=>controlAction("pause"));
+  $("#resumeBtn")?.addEventListener("click",()=>controlAction("resume"));
+  $("#cancelBtn")?.addEventListener("click",()=>controlAction("cancel"));
 })();

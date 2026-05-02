@@ -40,6 +40,7 @@ class EventRecorder:
         self._lock: asyncio.Lock = asyncio.Lock()
         self._write_lock: asyncio.Lock = asyncio.Lock()
         self._subscribers: dict[str, list[asyncio.Queue]] = defaultdict(list)
+        self._completed: set[str] = set()  # threads whose complete() has been called
         self._db_path = db_path
         self._db: aiosqlite.Connection | None = None
 
@@ -159,16 +160,39 @@ class EventRecorder:
         return list(ids)
 
     async def subscribe(
-        self, thread_id: str, since_sequence: int = 0
+        self, thread_id: str, since_sequence: int = 0, terminal: bool = False,
     ) -> AsyncGenerator[AtriumEvent, None]:
-        """Yield historical events then live events from a queue. None sentinel ends stream."""
-        queue: asyncio.Queue = asyncio.Queue()
-        async with self._lock:
-            historical = self.replay(thread_id, since_sequence=since_sequence)
-            self._subscribers[thread_id].append(queue)
+        """Yield historical events then live events from a queue. None sentinel ends stream.
+
+        If *terminal* is True (the session is already COMPLETED/FAILED/CANCELLED),
+        only replay history and exit — no need to wait for more events.
+        Uses the DB for historical replay when terminal, since in-memory events
+        are lost across process restarts.
+        """
+        terminal = terminal or thread_id in self._completed
+
+        # Use DB replay for terminal sessions (survives restarts);
+        # use in-memory replay for live sessions (faster, and live events
+        # haven't been flushed to DB yet).
+        if terminal:
+            historical = await self.replay_from_db(thread_id, since_sequence)
+        else:
+            async with self._lock:
+                historical = self.replay(thread_id, since_sequence=since_sequence)
 
         for event in historical:
             yield event
+
+        if terminal:
+            return  # thread is finished, no more events will arrive
+
+        queue: asyncio.Queue = asyncio.Queue()
+        async with self._lock:
+            # Re-check after acquiring lock — complete() may have been called
+            # while we were yielding historical events
+            if thread_id in self._completed:
+                return
+            self._subscribers[thread_id].append(queue)
 
         while True:
             item = await queue.get()
@@ -179,5 +203,6 @@ class EventRecorder:
     async def complete(self, thread_id: str) -> None:
         """Send None sentinel to all subscriber queues for this thread."""
         async with self._lock:
+            self._completed.add(thread_id)
             for queue in self._subscribers[thread_id]:
                 await queue.put(None)
