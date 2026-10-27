@@ -30,7 +30,7 @@ class SessionStatus(str, Enum):
 
 # Valid state transitions
 _TRANSITIONS: dict[SessionStatus, set[SessionStatus]] = {
-    SessionStatus.CREATED: {SessionStatus.RUNNING, SessionStatus.CANCELLED},
+    SessionStatus.CREATED: {SessionStatus.RUNNING, SessionStatus.CANCELLED, SessionStatus.COMPLETED, SessionStatus.FAILED},
     SessionStatus.RUNNING: {
         SessionStatus.PAUSED,
         SessionStatus.COMPLETED,
@@ -204,14 +204,14 @@ class SessionStore:
             cursor = await self._db.execute(
                 "SELECT session_id, workspace_id, title, objective, status, runtime, model, "
                 "container_id, workspace_path, parent_thread_id, metadata, created_at, last_active_at "
-                "FROM sessions WHERE workspace_id = ? AND status = ?",
+                "FROM sessions WHERE workspace_id = ? AND status = ? ORDER BY created_at DESC",
                 (workspace_id, status.value),
             )
         else:
             cursor = await self._db.execute(
                 "SELECT session_id, workspace_id, title, objective, status, runtime, model, "
                 "container_id, workspace_path, parent_thread_id, metadata, created_at, last_active_at "
-                "FROM sessions WHERE workspace_id = ?",
+                "FROM sessions WHERE workspace_id = ? ORDER BY created_at DESC",
                 (workspace_id,),
             )
         rows = await cursor.fetchall()

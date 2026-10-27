@@ -182,6 +182,12 @@ class DockerSandboxRunner(SandboxRunner):
             env_list.append(f"ATRIUM_MCP_SOCKET={_mcp_socket}")
             env_list.append(f"ATRIUM_SESSION_TOKEN={session_token}")
 
+        # Ensure workspace dir exists and is writable by the container user (10001)
+        import stat as _stat
+        _ws = Path(session.workspace_path)
+        _ws.mkdir(parents=True, exist_ok=True)
+        _ws.chmod(_stat.S_IRWXU | _stat.S_IRWXG | _stat.S_IRWXO)  # 0o777
+
         binds = [f"{session.workspace_path}:/workspace:rw"]
         if network_policy.allow_mcp and mcp_socket_path:
             binds.append(f"{mcp_socket_path}:{_mcp_socket}:rw")

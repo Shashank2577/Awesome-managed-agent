@@ -167,6 +167,8 @@ async function renderRunDetail(sessionId){
     const s=await api(`/api/v1/sessions/${sessionId}`);
     $("#detailTitle").textContent=s.title||"Run Detail";
     $("#detailId").textContent=`ID: ${s.session_id}`;
+    // Populate run meta panel
+    const rmpS=$("#rmpStatus");if(rmpS){rmpS.textContent=s.status||"—";$("#rmpRuntime").textContent=s.runtime||"—";$("#rmpModel").textContent=s.model||"—";$("#rmpStarted").textContent=s.created_at?.split("T")[0]||"—";$("#rmpCost").textContent=s.cost?`$${parseFloat(s.cost).toFixed(4)}`:"—";$("#rmpEvents").textContent="0";}
     // Config tab
     $("#configGrid").innerHTML=`<div class="config-item"><label>Runtime</label><div class="config-val">${esc(s.runtime||"—")}</div></div><div class="config-item"><label>Model</label><div class="config-val">${esc(s.model||"—")}</div></div><div class="config-item"><label>Status</label><div class="config-val"><span class="badge ${s.status==="COMPLETED"?"badge-success":s.status==="FAILED"?"badge-error":"badge-info"}">${esc(s.status||"—")}</span></div></div><div class="config-item"><label>Objective</label><div class="config-val" style="font-family:var(--font);font-size:13px">${esc(s.objective||"—")}</div></div>`;
     // API tab
@@ -196,7 +198,7 @@ class ThreadView{
   _card(h){const d=document.createElement("div");d.className="msg";d.innerHTML=h;$("#transcript").appendChild(d);this._scroll();return d}
   _scroll(){const c=$("#transcript").parentElement;if(c)c.scrollTop=c.scrollHeight}
 
-  _pushEvent(evt){this.evCount++;$("#eventCount").textContent=this.evCount;const kl=evt.type?.includes("FAILED")?"err":evt.type?.startsWith("PIVOT")?"warn":"";const r=document.createElement("div");r.className=`ev-item ${kl}`;r.innerHTML=`<span class="ev-seq">#${evt.sequence??"?"}</span><span class="ev-type">${esc(evt.type)}</span>`;$("#eventFeed").appendChild(r)}
+  _pushEvent(evt){this.evCount++;$("#eventCount").textContent=this.evCount;const re=$("#rmpEvents");if(re)re.textContent=this.evCount;const kl=evt.type?.includes("FAILED")?"err":evt.type?.startsWith("PIVOT")?"warn":"";const r=document.createElement("div");r.className=`ev-item ${kl}`;r.innerHTML=`<span class="ev-seq">#${evt.sequence??"?"}</span><span class="ev-type">${esc(evt.type)}</span>`;$("#eventFeed").appendChild(r)}
 
   handleEvent(evt){
     this._pushEvent(evt);
@@ -233,7 +235,7 @@ class ThreadView{
     else if(s==="COMPLETED")b.innerHTML='<span class="sdot sdot-completed"></span> completed',b.className="nav-badge";
     else if(s==="FAILED")b.innerHTML='<span class="sdot sdot-failed"></span> failed',b.className="nav-badge";
     else b.innerHTML=`<span class="sdot sdot-created"></span> ${s.toLowerCase()}`,b.className="nav-badge";
-    $("#sidebarRunStatus").innerHTML=`<span class="dot${s==="RUNNING"||s==="PLANNING"?" dot-live":""}"></span>${s.toLowerCase()}`;
+    $("#sidebarRunStatus").innerHTML=`<span class="dot${s==="RUNNING"||s==="PLANNING"?" dot-live":""}"></span>${s.toLowerCase()}`;const rmp=$("#rmpStatus");if(rmp)rmp.textContent=s;
   }
   _budget(e){/* simplified */}
 

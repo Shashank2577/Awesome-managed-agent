@@ -1,0 +1,792 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Atrium</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="core.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 28 28'><rect width='28' height='28' rx='7' fill='%237C6FF7'/><text x='14' y='19' text-anchor='middle' fill='white' font-size='14' font-weight='800' font-family='Inter,sans-serif'>A</text></svg>">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/gsap/3.12.5/gsap.min.js"></script>
+</head>
+<body>
+
+<div class="shell">
+
+  <!-- Topbar -->
+  <header class="topbar">
+    <div class="tb-brand">
+      <svg class="brand-icon" viewBox="0 0 28 28"><rect width="28" height="28" rx="7" fill="#7C6FF7"/><text x="14" y="19" text-anchor="middle" fill="white" font-size="14" font-weight="800" font-family="Inter,sans-serif">A</text></svg>
+      <span class="brand-name">Atrium</span>
+      <span class="brand-tag">v2</span>
+    </div>
+    <div class="tb-center" id="tb-breadcrumb"></div>
+    <div class="tb-end">
+      <div class="sys-health" id="sys-health">
+        <span class="health-dot" id="health-dot"></span>
+        <span class="health-label" id="health-label">Connecting…</span>
+      </div>
+      <button class="tb-btn" id="btn-new-run" onclick="showView('deploy')">
+        <svg viewBox="0 0 16 16"><path d="M8 2v12M2 8h12" stroke-width="2" stroke-linecap="round"/></svg>
+        New Run
+      </button>
+    </div>
+  </header>
+
+  <div class="body">
+
+    <!-- Sidebar rail -->
+    <nav class="rail">
+      <div class="rail-items">
+
+        <button class="rl" data-view="home">
+          <svg class="rl-ico" viewBox="0 0 18 18"><path d="M2 8L9 2l7 6v8a.6.6 0 01-.6.6H12V11H6v5.6H2.6A.6.6 0 012 16V8z"/></svg>
+          <span>Overview</span>
+        </button>
+
+        <button class="rl" data-view="agents">
+          <svg class="rl-ico" viewBox="0 0 18 18"><circle cx="9" cy="6" r="3"/><path d="M2 16c0-3.314 3.134-6 7-6s7 2.686 7 6"/></svg>
+          <span>Agents</span>
+          <span class="rl-badge" id="badge-agents"></span>
+        </button>
+
+        <button class="rl" data-view="runs">
+          <svg class="rl-ico" viewBox="0 0 18 18"><rect x="2" y="2" width="14" height="14" rx="3"/><path d="M5.5 6h7M5.5 9h7M5.5 12h4.5" stroke-linecap="round"/></svg>
+          <span>Runs</span>
+          <span class="rl-badge" id="badge-runs"></span>
+        </button>
+
+        <button class="rl" data-view="knowledge">
+          <svg class="rl-ico" viewBox="0 0 18 18"><path d="M4 2h7l4 4v10a1 1 0 01-1 1H4a1 1 0 01-1-1V3a1 1 0 011-1z"/><path d="M11 2v4h4" stroke-linejoin="round"/><path d="M6 9h6M6 12h4" stroke-linecap="round"/></svg>
+          <span>Knowledge</span>
+        </button>
+
+        <div class="rl-divider"></div>
+
+        <button class="rl" data-view="tools">
+          <svg class="rl-ico" viewBox="0 0 18 18"><path d="M12 2a4 4 0 00-3.8 5.2L2.5 12.9a1.5 1.5 0 002.1 2.1l6.8-5.6A4 4 0 1012 2z"/></svg>
+          <span>Tools</span>
+          <span class="rl-badge" id="badge-tools"></span>
+        </button>
+
+        <button class="rl" data-view="settings">
+          <svg class="rl-ico" viewBox="0 0 18 18"><circle cx="9" cy="9" r="2.5"/><path d="M9 1v2M9 15v2M1 9h2M15 9h2M3.22 3.22l1.41 1.41M13.36 13.36l1.42 1.42M3.22 14.78l1.41-1.41M13.36 4.64l1.42-1.42" stroke-linecap="round"/></svg>
+          <span>Settings</span>
+        </button>
+
+      </div>
+
+      <!-- Live run widget -->
+      <div class="rl-live" id="rl-live" hidden>
+        <div class="live-indicator">
+          <span class="live-dot"></span>
+          <span class="live-label">Live</span>
+        </div>
+        <div class="live-name" id="live-name">—</div>
+        <div class="live-meta" id="live-meta">—</div>
+        <button class="live-view-btn" onclick="openLiveRun()">View →</button>
+      </div>
+    </nav>
+
+    <!-- Main canvas -->
+    <main class="canvas" id="canvas">
+
+      <!-- ═══════════════════════════════════════════════
+           VIEW: OVERVIEW / COMMAND CENTER
+      ═══════════════════════════════════════════════ -->
+      <div class="view" id="v-home">
+        <div class="view-hd">
+          <div class="view-title-block">
+            <h1>Command Center</h1>
+            <p>Live overview of your agent fleet</p>
+          </div>
+          <button class="btn-primary" onclick="showView('deploy')">
+            <svg viewBox="0 0 14 14"><path d="M7 1v12M1 7h12" stroke-linecap="round" stroke-width="2"/></svg>
+            New Run
+          </button>
+        </div>
+
+        <!-- Stats row -->
+        <div class="stat-row" id="stat-row">
+          <div class="stat-card sc-violet">
+            <div class="sc-icon">
+              <svg viewBox="0 0 20 20"><path d="M10 2L2 8v10h5v-5h6v5h5V8L10 2z"/></svg>
+            </div>
+            <div class="sc-body">
+              <div class="sc-value" id="sc-total">—</div>
+              <div class="sc-label">Total Runs</div>
+            </div>
+          </div>
+          <div class="stat-card sc-emerald">
+            <div class="sc-icon">
+              <svg viewBox="0 0 20 20"><path d="M17 5L8 14l-5-5" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" fill="none"/></svg>
+            </div>
+            <div class="sc-body">
+              <div class="sc-value" id="sc-success">—</div>
+              <div class="sc-label">Success Rate</div>
+            </div>
+          </div>
+          <div class="stat-card sc-cyan">
+            <div class="sc-icon">
+              <svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="8"/><path d="M10 6v4l3 3" stroke-linecap="round"/></svg>
+            </div>
+            <div class="sc-body">
+              <div class="sc-value" id="sc-active">—</div>
+              <div class="sc-label">Active Now</div>
+            </div>
+          </div>
+          <div class="stat-card sc-amber">
+            <div class="sc-icon">
+              <svg viewBox="0 0 20 20"><circle cx="10" cy="10" r="8"/><path d="M10 6v4.5l2.5 1.5" stroke-linecap="round"/></svg>
+            </div>
+            <div class="sc-body">
+              <div class="sc-value" id="sc-avgdur">—</div>
+              <div class="sc-label">Avg Duration</div>
+            </div>
+          </div>
+          <div class="stat-card sc-rose">
+            <div class="sc-icon">
+              <svg viewBox="0 0 20 20"><path d="M2 14h16M2 10h16M2 6h10"/></svg>
+            </div>
+            <div class="sc-body">
+              <div class="sc-value" id="sc-cost">—</div>
+              <div class="sc-label">Total Cost</div>
+            </div>
+          </div>
+        </div>
+
+        <div class="two-col">
+          <!-- Recent runs -->
+          <div class="panel">
+            <div class="panel-hd">
+              <span class="panel-title">Recent Runs</span>
+              <button class="panel-link" onclick="showView('runs')">View all →</button>
+            </div>
+            <div class="run-list" id="home-run-list"></div>
+          </div>
+
+          <!-- Activity feed -->
+          <div class="panel">
+            <div class="panel-hd">
+              <span class="panel-title">Activity Feed</span>
+              <span class="live-pip" id="feed-pip">
+                <span class="pip-dot"></span>
+                Live
+              </span>
+            </div>
+            <div class="activity-feed" id="activity-feed"></div>
+          </div>
+        </div>
+
+        <!-- Agent fleet -->
+        <div class="panel">
+          <div class="panel-hd">
+            <span class="panel-title">Agent Fleet</span>
+            <button class="panel-link" onclick="showView('agents')">Manage →</button>
+          </div>
+          <div class="agent-row" id="home-agent-row"></div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════
+           VIEW: AGENTS
+      ═══════════════════════════════════════════════ -->
+      <div class="view" id="v-agents" hidden>
+        <div class="view-hd">
+          <div class="view-title-block">
+            <h1>Agents</h1>
+            <p>Configure agent personas, instructions, and tools</p>
+          </div>
+          <button class="btn-primary" onclick="openAgentModal()">
+            <svg viewBox="0 0 14 14"><path d="M7 1v12M1 7h12" stroke-linecap="round" stroke-width="2"/></svg>
+            New Agent
+          </button>
+        </div>
+
+        <div class="agent-grid" id="agent-grid"></div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════
+           VIEW: RUNS
+      ═══════════════════════════════════════════════ -->
+      <div class="view" id="v-runs" hidden>
+        <div class="view-hd">
+          <div class="view-title-block">
+            <h1>Runs</h1>
+            <p>Full execution history with cost and timing</p>
+          </div>
+          <div class="hd-actions">
+            <div class="search-box">
+              <svg viewBox="0 0 16 16"><circle cx="6.5" cy="6.5" r="4.5"/><path d="M10.5 10.5L14 14" stroke-linecap="round"/></svg>
+              <input type="text" id="runs-search" placeholder="Filter runs…" oninput="filterRuns(this.value)">
+            </div>
+            <div class="filter-tabs" id="run-filter-tabs">
+              <button class="ftab on" data-filter="all">All</button>
+              <button class="ftab" data-filter="completed">Completed</button>
+              <button class="ftab" data-filter="running">Running</button>
+              <button class="ftab" data-filter="failed">Failed</button>
+              <button class="ftab" data-filter="pending">Pending</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="table-wrap">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th>Objective</th>
+                <th>Agent</th>
+                <th>Model</th>
+                <th>Status</th>
+                <th>Duration</th>
+                <th>Events</th>
+                <th>Cost</th>
+                <th>Started</th>
+              </tr>
+            </thead>
+            <tbody id="runs-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════
+           VIEW: RUN DETAIL
+      ═══════════════════════════════════════════════ -->
+      <div class="view view-flush" id="v-run-detail" hidden>
+        <!-- Header -->
+        <div class="rd-hd">
+          <button class="btn-back" onclick="history.back(); showView('runs')">
+            <svg viewBox="0 0 14 14"><path d="M9 2L4 7l5 5" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/></svg>
+            Runs
+          </button>
+          <div class="rd-title-block">
+            <div class="rd-objective" id="rd-objective">—</div>
+            <div class="rd-meta-row">
+              <span class="rd-id mono" id="rd-id">—</span>
+              <span class="status-badge" id="rd-status-badge">—</span>
+              <span class="rd-meta-item"><span class="rd-meta-key">Model</span><span class="rd-meta-val mono" id="rd-model">—</span></span>
+              <span class="rd-meta-item"><span class="rd-meta-key">Runtime</span><span class="rd-meta-val mono" id="rd-runtime">—</span></span>
+              <span class="rd-meta-item"><span class="rd-meta-key">Duration</span><span class="rd-meta-val mono" id="rd-duration">—</span></span>
+              <span class="rd-meta-item"><span class="rd-meta-key">Events</span><span class="rd-meta-val mono" id="rd-events">—</span></span>
+              <span class="rd-meta-item"><span class="rd-meta-key">Tokens</span><span class="rd-meta-val mono" id="rd-tokens">—</span></span>
+              <span class="rd-meta-item"><span class="rd-meta-key">Cost</span><span class="rd-meta-val" id="rd-cost">—</span></span>
+            </div>
+          </div>
+          <div class="rd-actions">
+            <button class="btn-ghost sm" id="rd-cancel-btn" onclick="cancelRun()" hidden>Cancel</button>
+          </div>
+        </div>
+
+        <!-- Tabs -->
+        <div class="rd-tabs">
+          <button class="rd-tab on" data-tab="timeline">Timeline</button>
+          <button class="rd-tab" data-tab="stream">Stream</button>
+          <button class="rd-tab" data-tab="output">Output</button>
+          <button class="rd-tab" data-tab="config">Config</button>
+        </div>
+
+        <!-- Tab content -->
+        <div class="rd-body">
+
+          <!-- Timeline tab -->
+          <div class="rd-pane" id="rdp-timeline">
+            <div class="gantt-wrap">
+              <div class="gantt-legend">
+                <span class="gl-item gl-llm">LLM Call</span>
+                <span class="gl-item gl-tool">Tool Use</span>
+                <span class="gl-item gl-action">Action</span>
+                <span class="gl-item gl-error">Error</span>
+              </div>
+              <div class="gantt-area">
+                <svg class="gantt-svg" id="gantt-svg" width="100%" height="300"></svg>
+              </div>
+            </div>
+
+            <div class="rd-split">
+              <div class="rd-split-main">
+                <div class="event-table-wrap">
+                  <table class="event-table">
+                    <thead><tr><th>Type</th><th>Name</th><th>Start</th><th>Duration</th><th>Tokens</th><th>Cost</th></tr></thead>
+                    <tbody id="event-tbody"></tbody>
+                  </table>
+                </div>
+              </div>
+              <aside class="rd-inspector" id="rd-inspector">
+                <div class="inspector-empty" id="inspector-empty">
+                  <svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="16" stroke-width="1.5"/><path d="M20 12v10M20 28v1" stroke-linecap="round" stroke-width="1.5"/></svg>
+                  <p>Click an event to inspect</p>
+                </div>
+                <div class="inspector-detail" id="inspector-detail" hidden>
+                  <div class="ins-header">
+                    <span class="ins-type" id="ins-type">—</span>
+                    <span class="ins-name" id="ins-name">—</span>
+                  </div>
+                  <div class="ins-stats">
+                    <div class="ins-stat"><span>Duration</span><strong id="ins-dur">—</strong></div>
+                    <div class="ins-stat"><span>Tokens</span><strong id="ins-tokens">—</strong></div>
+                    <div class="ins-stat"><span>Cost</span><strong id="ins-cost">—</strong></div>
+                  </div>
+                  <div class="ins-section">
+                    <div class="ins-sec-label">Input</div>
+                    <div class="ins-code" id="ins-input">—</div>
+                  </div>
+                  <div class="ins-section">
+                    <div class="ins-sec-label">Output</div>
+                    <div class="ins-code" id="ins-output">—</div>
+                  </div>
+                </div>
+              </aside>
+            </div>
+          </div>
+
+          <!-- Stream tab -->
+          <div class="rd-pane" id="rdp-stream" hidden>
+            <div class="stream-feed" id="stream-feed"></div>
+          </div>
+
+          <!-- Output tab -->
+          <div class="rd-pane" id="rdp-output" hidden>
+            <div class="output-loading" id="rd-output-loading" hidden>
+              <span class="sf-pulse"></span> Loading session output…
+            </div>
+            <div class="output-empty" id="rd-output-empty" hidden>No output recorded for this session.</div>
+            <div class="output-body" id="rd-output-body" hidden>
+              <div class="out-headline" id="rd-out-headline"></div>
+              <div class="out-summary" id="rd-out-summary"></div>
+              <div class="out-sections" id="rd-out-sections"></div>
+            </div>
+          </div>
+
+          <!-- Config tab -->
+          <div class="rd-pane" id="rdp-config" hidden>
+            <div class="config-grid" id="rd-config-grid"></div>
+          </div>
+
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════
+           VIEW: KNOWLEDGE LIBRARY
+      ═══════════════════════════════════════════════ -->
+      <div class="view" id="v-knowledge" hidden>
+        <div class="view-hd">
+          <div class="view-title-block">
+            <h1>Knowledge Library</h1>
+            <p>Documents and data sources available to your agents</p>
+          </div>
+          <button class="btn-primary" onclick="openKbModal()">
+            <svg viewBox="0 0 14 14"><path d="M7 1v12M1 7h12" stroke-linecap="round" stroke-width="2"/></svg>
+            Upload
+          </button>
+        </div>
+
+        <div class="kb-stats-row">
+          <div class="kb-stat"><span class="kbs-val" id="kbs-docs">0</span><span class="kbs-lbl">Documents</span></div>
+          <div class="kb-stat"><span class="kbs-val" id="kbs-chunks">0</span><span class="kbs-lbl">Chunks indexed</span></div>
+          <div class="kb-stat"><span class="kbs-val" id="kbs-size">0 MB</span><span class="kbs-lbl">Total size</span></div>
+        </div>
+
+        <div class="kb-grid" id="kb-grid"></div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════
+           VIEW: OBSERVABILITY
+      ═══════════════════════════════════════════════ -->
+      <div class="view" id="v-observe" hidden>
+        <div class="view-hd">
+          <div class="view-title-block">
+            <h1>Observability</h1>
+            <p>Trends, latency, cost, and model usage</p>
+          </div>
+          <div class="time-range-tabs" id="time-range-tabs">
+            <button class="ftab on" data-range="7d">7d</button>
+            <button class="ftab" data-range="30d">30d</button>
+            <button class="ftab" data-range="90d">90d</button>
+          </div>
+        </div>
+
+        <div class="obs-grid">
+          <div class="obs-panel obs-wide">
+            <div class="obs-panel-hd">Runs per day</div>
+            <div class="bar-chart-wrap" id="chart-runs-day"></div>
+          </div>
+          <div class="obs-panel">
+            <div class="obs-panel-hd">Success rate over time</div>
+            <div class="line-chart-wrap" id="chart-success"></div>
+          </div>
+          <div class="obs-panel">
+            <div class="obs-panel-hd">Cost per run ($)</div>
+            <div class="scatter-chart-wrap" id="chart-cost"></div>
+          </div>
+          <div class="obs-panel">
+            <div class="obs-panel-hd">Top tools by usage</div>
+            <div class="horiz-chart-wrap" id="chart-tools"></div>
+          </div>
+          <div class="obs-panel">
+            <div class="obs-panel-hd">Model distribution</div>
+            <div class="donut-wrap" id="chart-models"></div>
+          </div>
+          <div class="obs-panel obs-wide">
+            <div class="obs-panel-hd">Latency percentiles (seconds)</div>
+            <div class="latency-wrap" id="chart-latency">
+              <div class="lat-row"><span class="lat-key">P50</span><div class="lat-bar-track"><div class="lat-bar" id="lat-p50"></div></div><span class="lat-val" id="lat-p50-val">—</span></div>
+              <div class="lat-row"><span class="lat-key">P75</span><div class="lat-bar-track"><div class="lat-bar" id="lat-p75"></div></div><span class="lat-val" id="lat-p75-val">—</span></div>
+              <div class="lat-row"><span class="lat-key">P90</span><div class="lat-bar-track"><div class="lat-bar" id="lat-p90"></div></div><span class="lat-val" id="lat-p90-val">—</span></div>
+              <div class="lat-row"><span class="lat-key">P95</span><div class="lat-bar-track"><div class="lat-bar" id="lat-p95"></div></div><span class="lat-val" id="lat-p95-val">—</span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════
+           VIEW: TOOLS HUB
+      ═══════════════════════════════════════════════ -->
+      <div class="view" id="v-tools" hidden>
+        <div class="view-hd">
+          <div class="view-title-block">
+            <h1>Tools Hub</h1>
+            <p>MCP servers and integrations available to agents</p>
+          </div>
+          <button class="btn-primary" onclick="openMcpModal()">
+            <svg viewBox="0 0 14 14"><path d="M7 1v12M1 7h12" stroke-linecap="round" stroke-width="2"/></svg>
+            Register MCP
+          </button>
+        </div>
+
+        <div class="tools-categories" id="tools-categories">
+          <button class="ftab on" data-cat="all">All</button>
+          <button class="ftab" data-cat="search">Search</button>
+          <button class="ftab" data-cat="data">Data</button>
+          <button class="ftab" data-cat="code">Code</button>
+          <button class="ftab" data-cat="comms">Comms</button>
+        </div>
+
+        <div class="tools-grid" id="tools-grid"></div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════
+           VIEW: SETTINGS
+      ═══════════════════════════════════════════════ -->
+      <div class="view" id="v-settings" hidden>
+        <div class="view-hd">
+          <div class="view-title-block">
+            <h1>Settings</h1>
+            <p>LLM providers, API keys, and platform configuration</p>
+          </div>
+        </div>
+
+        <div class="settings-sections">
+          <section class="settings-section">
+            <h3>LLM Providers</h3>
+            <p class="settings-desc">Configure API keys for each provider. Keys are stored only in this session.</p>
+            <div class="provider-grid" id="provider-grid"></div>
+          </section>
+
+          <section class="settings-section">
+            <h3>Default Model</h3>
+            <p class="settings-desc">Used when no model is specified in a run.</p>
+            <div class="field-row">
+              <div class="field-group" style="max-width:340px">
+                <label class="field-label">Model identifier</label>
+                <input class="field-input" id="default-model" placeholder="claude-sonnet-4-5" value="claude-sonnet-4-5">
+              </div>
+              <button class="btn-primary" style="align-self:flex-end" onclick="saveDefaultModel()">Save</button>
+            </div>
+          </section>
+
+          <section class="settings-section">
+            <h3>Budget Guard</h3>
+            <p class="settings-desc">Stop runs that exceed these limits.</p>
+            <div class="field-row">
+              <div class="field-group">
+                <label class="field-label">Max cost per run (USD)</label>
+                <input class="field-input" id="budget-max" value="12.00">
+              </div>
+              <div class="field-group">
+                <label class="field-label">Max run duration (seconds)</label>
+                <input class="field-input" id="timeout-max" value="1800">
+              </div>
+              <button class="btn-primary" style="align-self:flex-end" onclick="saveBudget()">Save</button>
+            </div>
+          </section>
+        </div>
+      </div>
+
+      <!-- ═══════════════════════════════════════════════
+           VIEW: DEPLOY / NEW RUN
+      ═══════════════════════════════════════════════ -->
+      <div class="view" id="v-deploy" hidden>
+        <div class="view-hd">
+          <div class="view-title-block">
+            <h1>New Run</h1>
+            <p>Launch an agent on a task</p>
+          </div>
+          <button class="btn-ghost" onclick="showView('home')">Cancel</button>
+        </div>
+
+        <div class="wizard">
+
+          <!-- Step 1: Objective -->
+          <div class="wz-step">
+            <div class="wz-step-hd">
+              <span class="wz-num">1</span>
+              <div>
+                <div class="wz-step-title">Objective</div>
+                <div class="wz-step-desc">What should the agent accomplish?</div>
+              </div>
+            </div>
+            <div class="wz-body">
+              <textarea class="field-textarea" id="fi-objective" rows="4"
+                placeholder="Describe the task in plain language.&#10;&#10;Example: Research the top 5 AI safety papers from 2025, summarize each one, and produce a structured Markdown report with citations."></textarea>
+              <div class="char-hint"><span id="obj-chars">0</span> characters</div>
+            </div>
+          </div>
+
+          <!-- Step 2: Agent -->
+          <div class="wz-step">
+            <div class="wz-step-hd">
+              <span class="wz-num">2</span>
+              <div>
+                <div class="wz-step-title">Agent</div>
+                <div class="wz-step-desc">Choose a configured agent or use default</div>
+              </div>
+            </div>
+            <div class="wz-body">
+              <div class="agent-selector" id="agent-selector"></div>
+            </div>
+          </div>
+
+          <!-- Step 3: Runtime & Model -->
+          <div class="wz-step">
+            <div class="wz-step-hd">
+              <span class="wz-num">3</span>
+              <div>
+                <div class="wz-step-title">Runtime &amp; Model</div>
+                <div class="wz-step-desc">Choose execution backend and LLM provider</div>
+              </div>
+            </div>
+            <div class="wz-body">
+              <div class="runtime-cards" id="runtime-cards">
+                <div class="rt-card selected" data-runtime="universal">
+                  <div class="rt-card-name">Universal</div>
+                  <div class="rt-card-desc">Any OpenAI-compatible</div>
+                </div>
+                <div class="rt-card" data-runtime="direct_anthropic">
+                  <div class="rt-card-name">Anthropic</div>
+                  <div class="rt-card-desc">Claude via SDK</div>
+                </div>
+                <div class="rt-card" data-runtime="direct_gemini">
+                  <div class="rt-card-name">Gemini</div>
+                  <div class="rt-card-desc">Google Gemini</div>
+                </div>
+                <div class="rt-card" data-runtime="open_agent_sdk">
+                  <div class="rt-card-name">OpenAI SDK</div>
+                  <div class="rt-card-desc">GPT models</div>
+                </div>
+                <div class="rt-card" data-runtime="echo">
+                  <div class="rt-card-name">Echo</div>
+                  <div class="rt-card-desc">Demo mode</div>
+                </div>
+              </div>
+              <div id="provider-fields">
+                <div class="field-row" style="margin-top:var(--sp-4)">
+                  <div class="field-group">
+                    <label class="field-label">Provider Preset</label>
+                    <select class="field-select" id="fi-preset">
+                      <option value="deepseek">DeepSeek</option>
+                      <option value="openrouter">OpenRouter</option>
+                      <option value="openai">OpenAI</option>
+                      <option value="anthropic">Anthropic</option>
+                      <option value="gemini">Gemini (OpenAI compat)</option>
+                      <option value="xai">xAI / Grok</option>
+                      <option value="groq">Groq</option>
+                      <option value="ollama">Ollama (local)</option>
+                    </select>
+                  </div>
+                  <div class="field-group">
+                    <label class="field-label">Model</label>
+                    <input class="field-input" id="fi-model" placeholder="deepseek-chat">
+                  </div>
+                </div>
+                <div class="field-row">
+                  <div class="field-group">
+                    <label class="field-label">Base URL</label>
+                    <input class="field-input" id="fi-base-url" placeholder="https://api.deepseek.com/v1">
+                  </div>
+                  <div class="field-group">
+                    <label class="field-label">API Key</label>
+                    <input class="field-input" id="fi-api-key" type="password" placeholder="sk-…">
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Step 4: Limits -->
+          <div class="wz-step">
+            <div class="wz-step-hd">
+              <span class="wz-num">4</span>
+              <div>
+                <div class="wz-step-title">Limits</div>
+                <div class="wz-step-desc">Budget and timeout guardrails</div>
+              </div>
+            </div>
+            <div class="wz-body">
+              <div class="field-row">
+                <div class="field-group">
+                  <label class="field-label">Budget Cap (USD)</label>
+                  <input class="field-input" id="fi-budget" value="12.00">
+                </div>
+                <div class="field-group">
+                  <label class="field-label">Timeout (seconds)</label>
+                  <input class="field-input" id="fi-timeout" value="1800">
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Launch -->
+          <div class="launch-row">
+            <button class="btn-launch-big" id="launch-btn" onclick="launchMission()">
+              <svg viewBox="0 0 16 16"><path d="M8 1v10M4 7l4 4 4-4" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/><path d="M3 14h10" stroke-linecap="round" stroke-width="2"/></svg>
+              Launch Run
+            </button>
+            <span class="launch-hint" id="launch-hint"></span>
+          </div>
+        </div>
+      </div>
+
+    </main>
+  </div>
+</div>
+
+<!-- ═══════════════════════════════════════════════
+     MODALS
+═══════════════════════════════════════════════ -->
+
+<!-- New Agent Modal -->
+<div class="modal-veil" id="modal-agent" hidden>
+  <div class="modal-box wide">
+    <div class="modal-hd">
+      <h4>New Agent</h4>
+      <button class="modal-x" onclick="closeModal('modal-agent')">
+        <svg viewBox="0 0 14 14"><path d="M2 2l10 10M12 2L2 12" stroke-linecap="round" stroke-width="2"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="agent-form-grid">
+        <div class="field-group full">
+          <label class="field-label">Agent name</label>
+          <input class="field-input" id="ag-name" placeholder="Research Scout">
+        </div>
+        <div class="field-group full">
+          <label class="field-label">Persona / Role</label>
+          <input class="field-input" id="ag-persona" placeholder="Senior research analyst specializing in AI papers">
+        </div>
+        <div class="field-group full">
+          <label class="field-label">System instructions</label>
+          <textarea class="field-textarea" id="ag-instructions" rows="5"
+            placeholder="You are a research agent. Your goal is to find, read, and synthesize information from authoritative sources. Always cite your sources. Be concise but thorough."></textarea>
+        </div>
+        <div class="field-group">
+          <label class="field-label">Default model</label>
+          <input class="field-input" id="ag-model" placeholder="claude-sonnet-4-5">
+        </div>
+        <div class="field-group">
+          <label class="field-label">Runtime</label>
+          <select class="field-select" id="ag-runtime">
+            <option value="universal">Universal</option>
+            <option value="direct_anthropic">Anthropic</option>
+            <option value="direct_gemini">Gemini</option>
+            <option value="open_agent_sdk">OpenAI SDK</option>
+          </select>
+        </div>
+        <div class="field-group full">
+          <label class="field-label">Tools (select all that apply)</label>
+          <div class="tool-checkboxes" id="tool-checkboxes"></div>
+        </div>
+      </div>
+    </div>
+    <div class="modal-ft">
+      <button class="btn-ghost" onclick="closeModal('modal-agent')">Cancel</button>
+      <button class="btn-primary" onclick="createAgent()">Create Agent</button>
+    </div>
+  </div>
+</div>
+
+<!-- MCP Server Modal -->
+<div class="modal-veil" id="modal-mcp" hidden>
+  <div class="modal-box">
+    <div class="modal-hd">
+      <h4>Register MCP Server</h4>
+      <button class="modal-x" onclick="closeModal('modal-mcp')">
+        <svg viewBox="0 0 14 14"><path d="M2 2l10 10M12 2L2 12" stroke-linecap="round" stroke-width="2"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="field-group">
+        <label class="field-label">Name</label>
+        <input class="field-input" id="mcp-name" placeholder="sqlite">
+      </div>
+      <div class="field-group">
+        <label class="field-label">Transport</label>
+        <select class="field-select" id="mcp-transport">
+          <option value="stdio">stdio</option>
+          <option value="sse">sse</option>
+        </select>
+      </div>
+      <div class="field-group">
+        <label class="field-label">Command / URL</label>
+        <input class="field-input" id="mcp-upstream" placeholder="uvx mcp-server-sqlite --db-path /data.db">
+      </div>
+    </div>
+    <div class="modal-ft">
+      <button class="btn-ghost" onclick="closeModal('modal-mcp')">Cancel</button>
+      <button class="btn-primary" onclick="createMcpServer()">Register</button>
+    </div>
+  </div>
+</div>
+
+<!-- Knowledge Base Modal -->
+<div class="modal-veil" id="modal-kb" hidden>
+  <div class="modal-box">
+    <div class="modal-hd">
+      <h4>Add Knowledge Source</h4>
+      <button class="modal-x" onclick="closeModal('modal-kb')">
+        <svg viewBox="0 0 14 14"><path d="M2 2l10 10M12 2L2 12" stroke-linecap="round" stroke-width="2"/></svg>
+      </button>
+    </div>
+    <div class="modal-body">
+      <div class="field-group">
+        <label class="field-label">Name</label>
+        <input class="field-input" id="kb-name" placeholder="AI Safety Papers 2025">
+      </div>
+      <div class="field-group">
+        <label class="field-label">Source type</label>
+        <select class="field-select" id="kb-type">
+          <option value="upload">File upload</option>
+          <option value="url">URL / website</option>
+          <option value="notion">Notion page</option>
+          <option value="github">GitHub repo</option>
+        </select>
+      </div>
+      <div class="field-group">
+        <label class="field-label">Path / URL</label>
+        <input class="field-input" id="kb-source" placeholder="/path/to/documents or https://...">
+      </div>
+    </div>
+    <div class="modal-ft">
+      <button class="btn-ghost" onclick="closeModal('modal-kb')">Cancel</button>
+      <button class="btn-primary" onclick="createKb()">Add Source</button>
+    </div>
+  </div>
+</div>
+
+<!-- Toast root -->
+<div id="toast-root"></div>
+
+<script src="core.js" type="module"></script>
+</body>
+</html>

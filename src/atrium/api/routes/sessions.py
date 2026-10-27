@@ -127,6 +127,55 @@ async def get_session(
     return _sess_response(session)
 
 
+@router.get("/{session_id}/result")
+async def get_session_result(
+    session_id: str,
+    workspace: "Workspace" = Depends(require_workspace),
+    state: "AppState" = Depends(lambda: AppState.instance()),
+) -> dict:
+    """Return the final output (EVIDENCE_PUBLISHED) for a completed session."""
+    recorder = state.recorder
+    if recorder is None:
+        raise HTTPException(503, "Event recorder not available")
+    events = await recorder.replay_from_db(session_id)
+    # Priority: EVIDENCE_PUBLISHED > HARNESS_MESSAGE > AGENT_OUTPUT
+    for ev in reversed(events):
+        if ev.type == "EVIDENCE_PUBLISHED":
+            return {"found": True, "type": ev.type, "result": ev.payload, "session_id": session_id}
+    for ev in reversed(events):
+        if ev.type in ("HARNESS_MESSAGE", "AGENT_OUTPUT", "AGENT_MESSAGE"):
+            return {"found": True, "type": ev.type, "result": ev.payload, "session_id": session_id}
+    return {"found": False, "type": None, "result": None, "session_id": session_id}
+
+
+@router.get("/{session_id}/events")
+async def get_session_events(
+    session_id: str,
+    limit: int = 200,
+    workspace: "Workspace" = Depends(require_workspace),
+    state: "AppState" = Depends(lambda: AppState.instance()),
+) -> dict:
+    """Return historical events for a session (for timeline + stream replay)."""
+    recorder = state.recorder
+    if recorder is None:
+        raise HTTPException(503, "Event recorder not available")
+    events = await recorder.replay_from_db(session_id)
+    return {
+        "session_id": session_id,
+        "total": len(events),
+        "events": [
+            {
+                "id": e.event_id,
+                "type": e.type,
+                "payload": e.payload,
+                "sequence": e.sequence,
+                "timestamp": e.timestamp.isoformat(),
+            }
+            for e in events[:limit]
+        ],
+    }
+
+
 @router.post("/{session_id}/pause", status_code=202)
 async def pause_session(
     session_id: str,
@@ -733,8 +782,13 @@ async def _run_echo_simulation(
         await emit("THREAD_COMPLETED", {})
         if sess_store:
             await sess_store.set_status(workspace_id, session_id, SessionStatus.COMPLETED)
-    except Exception:
-        pass
+    except Exception as exc:
+        await rec.emit(session_id, "THREAD_FAILED", {"error": str(exc)})
+        if sess_store:
+            try:
+                await sess_store.set_status(workspace_id, session_id, SessionStatus.FAILED)
+            except Exception:
+                pass
 
 
 # ---------------------------------------------------------------------------
